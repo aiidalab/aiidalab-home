@@ -1,6 +1,7 @@
 import ipywidgets as ipw
 
 def get_start_widget(appbase, jupbase):
+    #http://fontawesome.io/icons/
     template = """
 <a style="{style}" href="{jupbase}/tree/" title="File Browser" target="_blank">
 <i class="fa fa-file-text-o fa-4x"></i>
