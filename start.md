@@ -1,4 +1,0 @@
-- [Dashboard](../../../tree/)
-- [Task Manager](../../../tree/#running)
-- [Terminal](./terminal.ipynb)
-- [Manage Apps](./appmanager.ipynb)
