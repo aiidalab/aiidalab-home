@@ -34,7 +34,7 @@ def get_start_widget(appbase, jupbase):
     <td style="width:70px"></td>
 
     <td style="text-align:center">
-    <a style="{style}" href="{appbase}/appmanager.ipynb" title="Manage Apps">
+    <a style="{style}" href="{appbase}/appstore.ipynb" title="App Store">
     <i class="fa fa-cog fa-4x" aria-hidden="true"></i>
     </a><br>
     Manage Apps
