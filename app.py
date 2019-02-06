@@ -30,6 +30,7 @@ class AppBase():
             self.groups = app_data['groups']
         else:
             self._git_url = None
+            self._git_remote_refs = {}
         self.install_info = ipw.HTML()
         self.aiidalab_apps = aiidalab_apps
         self.name = name
@@ -122,6 +123,8 @@ class AppBase():
         update_available = False
         if self.current_version is None:
             return False
+        elif not self._git_url:
+            return False
         elif self.current_version.startswith('refs/tags/'):
             # TODO: if it is a tag check for the newer tags
             return False
@@ -132,7 +135,10 @@ class AppBase():
             local_head_at = self.repo[bytes(local_branch)]
             remote_head_at = self.repo[bytes(self.current_version)]
             # learn about remote repository
-            on_server_head_at = self._git_remote_refs[local_branch]
+            try:
+                on_server_head_at = self._git_remote_refs[local_branch]
+            except KeyError:
+                return False
             if remote_head_at.id != on_server_head_at: # maybe remote reference on the server is outdated.
                                                        # I check if the remote commit is present in my remote commit history
                 for c in self.repo.get_walker(remote_head_at.id):
@@ -486,7 +492,9 @@ class AppBase():
     def update_info(self):
         if not self.has_git_repo():
             return """<font color="#D8000C"><i class='fa fa-times-circle'></i> Not Git Repo</font>"""
-        if self.git_update_available():
+        elif not self._git_url:
+            return """<font color="#D8000C"><i class='fa fa-times-circle'></i> Not remote URL</font>"""
+        elif self.git_update_available():
             return """<font color="#9F6000"><i class='fa fa-warning'></i> Update Available</font>"""
         else:
             return """<font color="#270"><i class='fa fa-check'></i> Latest Version</font>"""
