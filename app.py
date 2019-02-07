@@ -365,7 +365,11 @@ class AppBase():
                         current = key
             except IndexError: # In case this is not a branch, but a tag for example
                 reverted_refs_dict = {value: key for key, value in refs_dict.items()}
-                current = reverted_refs_dict[self.repo.refs.follow('HEAD')[1]] # knowing the hash I can access the tag
+                try:
+                    current = reverted_refs_dict[self.repo.refs.follow('HEAD')[1]] # knowing the hash I can access the tag
+                except KeyError:
+                    print "Detached HEAD state ({} app)?".format(self.name)
+                    return None
             self._current_version = current
         return self._current_version
 
