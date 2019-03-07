@@ -1,4 +1,5 @@
 import re
+import os
 import requests
 import ipywidgets as ipw
 from collections import OrderedDict
@@ -477,7 +478,13 @@ class AppBase():
             if self.is_installed():
                 res.value = '<img src="{}">'.format(path.join('..', self.name, self.metadata['logo']))
             else:
-                res.value = '<img src="{}">'.format(self._git_url + '/' + self.metadata['logo'])
+                html_link = os.path.splitext(self._git_url)[0] # remove .git if present
+                html_link += '/master/' + self.metadata['logo'] # we expect it to always be a git repository
+                if 'github.com' in html_link:
+                    html_link = html_link.replace('github.com', 'raw.githubusercontent.com')
+                    if html_link.endswith('.svg'):
+                        html_link += '?sanitize=true'
+                res.value = '<img src="{}">'.format(html_link)
         except:
             res.value = '<img src="./aiidalab_logo_v4.svg">'
             # for some reason standard ipw.Image() app does not work properly
