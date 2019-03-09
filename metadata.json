@@ -1,5 +1,6 @@
 {
-    "description": "AiiDA Lab Home",
     "title": "Home",
+    "description": "AiiDA Lab Home",
+    "authors": "Aliaksandr Yakutovich, Ole Schuett, Casper Welzel Andersen, Leopold Talirz, Edward Ditler",
     "version": "0.3.8"
 }
