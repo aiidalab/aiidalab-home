@@ -28,7 +28,7 @@ class AppBase():
             self._git_url = app_data['git_url']
             self._meta_url = app_data['meta_url']
             self._git_remote_refs = app_data['gitinfo']
-            self.groups = app_data['groups']
+            self.categories = app_data['categories']
         else:
             self._git_url = None
             self._git_remote_refs = {}
@@ -36,9 +36,9 @@ class AppBase():
         self.aiidalab_apps = aiidalab_apps
         self.name = name
 
-    def in_group(self, group):
-        # TODO: see what will happen if the group won't be defined
-        return group in self.groups
+    def in_category(self, category):
+        # TODO: see what will happen if the category won't be defined
+        return category in self.categories
 
     def _get_appdir(self):
         return path.join(self.aiidalab_apps, self.name)

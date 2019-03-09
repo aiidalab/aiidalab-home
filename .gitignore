@@ -2,5 +2,6 @@
 *.pyc
 .*.ipynb
 .ipynb_checkpoints
-
+.launcher.json
+apps_meta.sqlite
 .vscode
