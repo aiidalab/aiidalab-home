@@ -310,6 +310,23 @@ class AppBase():
         return self._version
 
     @property
+    def refs_dict(self):
+        if not hasattr(self, '_refs_dict'):
+            from dulwich.objects import Commit, Tag
+            self._refs_dict = {}
+            for key, value in self.repo.get_refs().items():
+                if key.endswith('HEAD'):
+                    continue
+                elif key.startswith('refs/heads/'):
+                    continue
+                obj = self.repo.get_object(value)
+                if type(obj) == Tag:
+                    self._refs_dict[key] = obj.object[1]
+                elif type(obj) == Commit:
+                    self._refs_dict[key] = value
+        return self._refs_dict
+
+    @property
     def available_versions(self):
         """
         Function that looks for all the available branches. The branches can be both
@@ -318,26 +335,28 @@ class AppBase():
         : return : an OrderedDict that contains all available branches, for example
                    OrderedDict([('master', 'refs/remotes/origin/master')])
         """
-        if not hasattr(self, '_current_version'):
+        if not hasattr(self, '_available_versions'):
             # HEAD branch won't be included
-            refs_dict = { key:value for key, value in self.repo.get_refs().items() if not key.endswith('HEAD')}
-            if not refs_dict: # if no branches were found - return None
+            if not self.refs_dict: # if no branches were found - return None
                 return {}
+
             # add remote branches
             available = OrderedDict({name.split('/')[-1]:name
-                                     for name, _ in refs_dict.items()
+                                     for name, _ in self.refs_dict.items()
                                      if name.startswith('refs/remotes/')})
+
             # add local branches that do not have tracked remotes
-            for name in refs_dict:
+            for name in self.refs_dict:
                 if name.startswith('refs/heads/'):
                     branch_label = name.replace('refs/heads/', '')
                     pattern = re.compile("refs/remotes/.*/{}".format(branch_label))
                     # check if no tracked remotes that correspond to the current local branch
                     if not any(pattern.match(value) for value in available.values()):
                         available[branch_label] = name
+
             # add tags
             available.update(sorted({name.split('/')[-1]:name
-                                     for name, _ in refs_dict.items()
+                                     for name, _ in self.refs_dict.items()
                                      if name.startswith('refs/tags/')}.items(),reverse=True))
             self._available_versions = available
         return self._available_versions
@@ -347,14 +366,14 @@ class AppBase():
         """Function that returns the reference to the currently selected branch,
         for example 'refs/remotes/origin/master' """
         if not hasattr(self, '_current_version'):
-            refs_dict = { key:value for key, value in self.repo.get_refs().items() if not key.endswith('HEAD')}
             # if no branches were found - return None
-            if not refs_dict:
+            if not self.refs_dict:
                 return None
             # get the current version
             available = self.available_versions
             try:
                 # get local branch name, except if not yet exists
+
                 current = self.repo.refs.follow('HEAD')[0][1] # returns 'refs/heads/master'
                                                               # if it is a tag it will except here
                 branch_label = current.replace('refs/heads/', '') # becomes 'master'
@@ -365,7 +384,7 @@ class AppBase():
                     if pattern.match(key):
                         current = key
             except IndexError: # In case this is not a branch, but a tag for example
-                reverted_refs_dict = {value: key for key, value in refs_dict.items()}
+                reverted_refs_dict = {value: key for key, value in self.refs_dict.items()}
                 try:
                     current = reverted_refs_dict[self.repo.refs.follow('HEAD')[1]] # knowing the hash I can access the tag
                 except KeyError:
@@ -406,10 +425,14 @@ class AppBase():
         if self.is_installed() and self.has_git_repo():
             self.version.selected.options = self.available_versions
             self.version.selected.value = self.current_version
+            # TODO: replace with
+            # self.version.layout.visibility = 'visibility'
             self.version.selected.layout.visibility = 'visible'
             self.version.change_btn.layout.visibility = 'visible'
         else:
             # deactivate version selector
+            # TODO: replace with
+            # self.version.layout.visibility = 'hidden'
             self.version.selected.layout.visibility = 'hidden'
             self.version.change_btn.layout.visibility = 'hidden'
         
