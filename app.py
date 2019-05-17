@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import re
 import os
 import requests
@@ -127,11 +129,11 @@ class AppBase():
             return False
         if not self._git_url:
             return False
-        if self.current_version.startswith('refs/tags/'):
+        if self.current_version.startswith(b'refs/tags/'):
             # TODO: if it is a tag check for the newer tags
             return False
         # if it is a branch
-        if self.current_version.startswith('refs/remotes/'):
+        if self.current_version.startswith(b'refs/remotes/'):
             # learn about local repository
             local_branch = re.sub('refs/remotes/(\w+)/', 'refs/heads/', self.current_version)
             local_head_at = self.repo[bytes(local_branch)]
@@ -158,7 +160,7 @@ class AppBase():
             # else
             return False
         # local branches can't have an update
-        if self.current_version.startswith('refs/heads'):
+        if self.current_version.startswith(b'refs/heads'):
             return False
         # something else
         return False
@@ -315,9 +317,9 @@ class AppBase():
             from dulwich.objects import Commit, Tag
             self._refs_dict = {}
             for key, value in self.repo.get_refs().items():
-                if key.endswith('HEAD'):
+                if key.endswith(b'HEAD'):
                     continue
-                elif key.startswith('refs/heads/'):
+                elif key.startswith(b'refs/heads/'):
                     continue
                 obj = self.repo.get_object(value)
                 if isinstance(obj, Tag):
@@ -341,23 +343,23 @@ class AppBase():
                 return {}
 
             # add remote branches
-            available = OrderedDict({name.split('/')[-1]:name
+            available = OrderedDict({name.split(b'/')[-1]:name
                                      for name, _ in self.refs_dict.items()
-                                     if name.startswith('refs/remotes/')})
+                                     if name.startswith(b'refs/remotes/')})
 
             # add local branches that do not have tracked remotes
             for name in self.refs_dict:
-                if name.startswith('refs/heads/'):
-                    branch_label = name.replace('refs/heads/', '')
+                if name.startswith(b'refs/heads/'):
+                    branch_label = name.replace(b'refs/heads/', b'')
                     pattern = re.compile("refs/remotes/.*/{}".format(branch_label))
                     # check if no tracked remotes that correspond to the current local branch
                     if not any(pattern.match(value) for value in available.values()):
                         available[branch_label] = name
 
             # add tags
-            available.update(sorted({name.split('/')[-1]:name
+            available.update(sorted({name.split(b'/')[-1]:name
                                      for name, _ in self.refs_dict.items()
-                                     if name.startswith('refs/tags/')}.items(),reverse=True))
+                                     if name.startswith(b'refs/tags/')}.items(),reverse=True))
             self._available_versions = available
         return self._available_versions
 
@@ -374,13 +376,14 @@ class AppBase():
             try:
                 # get local branch name, except if not yet exists
 
-                current = self.repo.refs.follow('HEAD')[0][1]  # returns 'refs/heads/master'
+                current = self.repo.refs.follow(b'HEAD')[0][1]  # returns 'refs/heads/master'
                                                                # if it is a tag it will except here
-                branch_label = current.replace('refs/heads/', '') # becomes 'master'
+                branch_label = current.replace(b'refs/heads/', b'') # becomes 'master'
                 # find the corresponding (remote or local) branch among the ones that were
                 # found before
                 pattern = re.compile("refs/.*/{}".format(branch_label))
                 for key in {value for value in available.values()}:
+                    key = str(key)
                     if pattern.match(key):
                         current = key
             except IndexError: # In case this is not a branch, but a tag for example
