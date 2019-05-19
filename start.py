@@ -35,7 +35,7 @@ def get_start_widget(appbase, jupbase):
     <td style="width:70px"></td>
 
     <td style="text-align:center">
-    <a style="{style}" href="{appbase}/appstore.ipynb" title="Install New Apps">
+    <a style="{style}" href="{appbase}/appstore.ipynb" title="Install New Apps" target="_blank">
     <i class="fa fa-puzzle-piece fa-3x" aria-hidden="true"></i>
     </a><br>
     App Store
