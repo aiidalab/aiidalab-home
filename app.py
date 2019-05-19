@@ -525,9 +525,9 @@ class AppBase():
     @property
     def update_info(self):
         if not self.has_git_repo():
-            return """<font color="#D8000C"><i class='fa fa-times-circle'></i> Not Git Repo</font>"""
+            return """<font color="#D8000C"><i class='fa fa-times-circle'></i> Not a Git Repo</font>"""
         elif not self._git_url:
-            return """<font color="#D8000C"><i class='fa fa-times-circle'></i> Not remote URL</font>"""
+            return """<font color="#D8000C"><i class='fa fa-times-circle'></i> No remote URL</font>"""
         elif self.git_update_available():
             return """<font color="#9F6000"><i class='fa fa-warning'></i> Update Available</font>"""
         else:
