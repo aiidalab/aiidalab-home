@@ -76,14 +76,14 @@ class AppBase():
           can be that there are no local commits in it
         - if it is a remote branch - check properly"""
         # no local commits if it is a tag
-        if self.current_version.startswith('refs/tags/'):
+        if self.current_version.startswith(b'refs/tags/'):
             return False
         # here it is assumed that if the branch is local, it has some stuff done in it,
         # therefore True is returned even though technically it is not always true
-        if self.current_version.startswith('refs/heads/'):
+        if self.current_version.startswith(b'refs/heads/'):
             return True
         # if it is a remote branch
-        if self.current_version.startswith('refs/remotes/'):
+        if self.current_version.startswith(b'refs/remotes/'):
             try: # look for the local branches that track the remote ones
                 local_branch = re.sub('refs/remotes/(\w+)/', 'refs/heads/', self.current_version)
                 local_head_at = self.repo[bytes(local_branch)]
@@ -135,7 +135,7 @@ class AppBase():
         # if it is a branch
         if self.current_version.startswith(b'refs/remotes/'):
             # learn about local repository
-            local_branch = re.sub('refs/remotes/(\w+)/', 'refs/heads/', self.current_version)
+            local_branch = re.sub(b'refs/remotes/(\w+)/', b'refs/heads/', self.current_version)
             local_head_at = self.repo[bytes(local_branch)]
             remote_head_at = self.repo[bytes(self.current_version)]
             # learn about remote repository
@@ -343,21 +343,21 @@ class AppBase():
                 return {}
 
             # add remote branches
-            available = OrderedDict({name.split(b'/')[-1]:name
+            available = OrderedDict({name.split(b'/')[-1].decode("utf-8"):name
                                      for name, _ in self.refs_dict.items()
                                      if name.startswith(b'refs/remotes/')})
 
             # add local branches that do not have tracked remotes
             for name in self.refs_dict:
                 if name.startswith(b'refs/heads/'):
-                    branch_label = name.replace(b'refs/heads/', b'')
+                    branch_label = name.replace(b'refs/heads/', b'').decode("utf-8")
                     pattern = re.compile("refs/remotes/.*/{}".format(branch_label))
                     # check if no tracked remotes that correspond to the current local branch
                     if not any(pattern.match(value) for value in available.values()):
                         available[branch_label] = name
 
             # add tags
-            available.update(sorted({name.split(b'/')[-1]:name
+            available.update(sorted({name.split(b'/')[-1].decode("utf-8"):name
                                      for name, _ in self.refs_dict.items()
                                      if name.startswith(b'refs/tags/')}.items(),reverse=True))
             self._available_versions = available
@@ -381,15 +381,14 @@ class AppBase():
                 branch_label = current.replace(b'refs/heads/', b'') # becomes 'master'
                 # find the corresponding (remote or local) branch among the ones that were
                 # found before
-                pattern = re.compile("refs/.*/{}".format(branch_label))
+                pattern = re.compile(b"refs/.*/%s" % branch_label)
                 for key in {value for value in available.values()}:
-                    key = str(key)
                     if pattern.match(key):
                         current = key
             except IndexError: # In case this is not a branch, but a tag for example
                 reverted_refs_dict = {value: key for key, value in self.refs_dict.items()}
                 try:
-                    current = reverted_refs_dict[self.repo.refs.follow('HEAD')[1]] # knowing the hash I can access the tag
+                    current = reverted_refs_dict[self.repo.refs.follow(b'HEAD')[1]] # knowing the hash I can access the tag
                 except KeyError:
                     print("Detached HEAD state ({} app)?".format(self.name))
                     return None
