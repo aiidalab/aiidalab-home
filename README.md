@@ -1,4 +1,4 @@
-# AiiDA Lab - Home 
+# AiiDA lab - Home
 
 The home app parses apps present in `$AIIDALAB_HOME` (default: `/project`) and displays them
 using their `start.py` or `start.md` files.
