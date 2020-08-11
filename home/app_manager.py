@@ -80,7 +80,7 @@ class AppManagerWidget(ipw.VBox):
         body.layout = {'width': '600px'}
 
         # Setup install_info
-        self.install_info = StatusHTML()
+        self.install_info = StatusHTML(layout={'max_width': '600px'})
 
         # Setup buttons
         self.install_button = ipw.Button(description='Install', disabled=True)
@@ -92,6 +92,15 @@ class AppManagerWidget(ipw.VBox):
         self.update_button = ipw.Button(description='Update', disabled=True)
         self.update_button.on_click(self._update_app)
 
+        self.install_environment_button = ipw.Button(
+            description='Install environment',
+            disabled=True,
+            button_style='success',
+            tooltip='Install the app-specific Python environment, Jupyter kernel, and app dependencies.',
+        )
+        self.install_environment_button.layout.visibility = 'hidden'
+        self.install_environment_button.on_click(self._install_environment)
+
         self.detachment_indicator = ipw.HTML()
         self.detachment_ignore = ipw.Checkbox(description="Ignore")
         self.detachment_ignore.observe(self._refresh_widget_state)
@@ -101,7 +110,10 @@ class AppManagerWidget(ipw.VBox):
 
         children = [
             ipw.HBox([load_logo(app), body]),
-            ipw.HBox([self.uninstall_button, self.install_button, self.update_button, self.spinner]),
+            ipw.HBox([
+                self.uninstall_button, self.install_button, self.update_button, self.spinner,
+                self.install_environment_button
+            ]),
             ipw.HBox([self.install_info]),
             ipw.HBox([self.detachment_indicator, self.detachment_ignore]),
         ]
@@ -114,6 +126,10 @@ class AppManagerWidget(ipw.VBox):
         self.version_selector.layout.visibility = 'visible' if with_version_selector else 'hidden'
         self.version_selector.disabled = True
         self.version_selector.version_to_install.observe(self._refresh_widget_state, 'value')
+
+        ipw.dlink((self.app, 'environment_message'), (self.version_selector.info, 'message'),
+                  transform=lambda msg: HTML_MSG_FAILURE.format(msg) if msg else "")
+
         children.insert(1, self.version_selector)
 
         super().__init__(children=children)
@@ -121,9 +137,8 @@ class AppManagerWidget(ipw.VBox):
         self.app.observe(self._refresh_widget_state)
         self.app.refresh_async()  # init all widgets
 
-    @staticmethod
-    def _formatted_version(version):
-        """Format the unambigious version identifiee to a human-friendly representation."""
+    def _formatted_version(self, version):
+        """Format the unambigious version identifier to a human-friendly representation."""
         if version is AppVersion.NOT_INSTALLED:
             return '[not installed]'
 
@@ -213,13 +228,20 @@ class AppManagerWidget(ipw.VBox):
                 self.detachment_indicator.value = ''
             self.detachment_ignore.layout.visibility = 'visible' if detached else 'hidden'
 
+            self.install_environment_button.layout.visibility = 'visible' if self.app.environment_message else 'hidden'
+            self.install_environment_button.disabled = busy or not self.app.environment_message
+
+    def _show_msg_progress(self, msg):
+        """Show a message indicating currently executed operation."""
+        self.install_info.show_temporary_message(HTML_MSG_PROGRESS.format(msg), clear_after=300)
+
     def _show_msg_success(self, msg):
         """Show a message indicating successful execution of a requested operation."""
         self.install_info.show_temporary_message(HTML_MSG_SUCCESS.format(msg))
 
     def _show_msg_failure(self, msg):
         """Show a message indicating failure to execute a requested operation."""
-        self.install_info.show_temporary_message(HTML_MSG_FAILURE.format(msg))
+        self.install_info.show_temporary_message(HTML_MSG_FAILURE.format(msg), clear_after=10)
 
     def _check_detached_state(self):
         """Check whether the app is in a detached state which would prevent any install or other operations."""
@@ -234,11 +256,12 @@ class AppManagerWidget(ipw.VBox):
         version = self.version_selector.version_to_install.value  # can be None
         try:
             self._check_detached_state()
-            version = self.app.install_app(version=version)  # argument may be None
+            for msg in self.app.install_app(version=version):
+                self._show_msg_progress(msg)
         except (AssertionError, RuntimeError, CalledProcessError) as error:
             self._show_msg_failure(str(error))
         else:
-            self._show_msg_success(f"Installed app ({self._formatted_version(version)}).")
+            self._show_msg_success(f"Installed app ({self._formatted_version(self.app.installed_version)}).")
 
     def _update_app(self, _):
         """Attempt to uninstall the app."""
@@ -249,6 +272,16 @@ class AppManagerWidget(ipw.VBox):
             self._show_msg_failure(str(error))
         else:
             self._show_msg_success("Updated app.")
+
+    def _install_environment(self, _):
+        """Attempt to install the app environment."""
+        try:
+            for msg in self.app.install_environment():
+                self._show_msg_progress(msg)
+        except RuntimeError as error:
+            self._show_msg_failure(str(error))
+        else:
+            self._show_msg_success("Installed environment.")
 
     def _uninstall_app(self, _):
         """Attempt to uninstall the app."""
