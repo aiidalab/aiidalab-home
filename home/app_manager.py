@@ -101,9 +101,9 @@ class AppManagerWidget(ipw.VBox):
         self.install_environment_button.layout.visibility = 'hidden'
         self.install_environment_button.on_click(self._install_environment)
 
-        self.detachment_indicator = ipw.HTML()
-        self.detachment_ignore = ipw.Checkbox(description="Ignore")
-        self.detachment_ignore.observe(self._refresh_widget_state)
+        self.blocked_operation_indicator = ipw.HTML()
+        self.blocked_operation_ignore = ipw.Checkbox(description="Ignore")
+        self.blocked_operation_ignore.observe(self._refresh_widget_state)
 
         self.spinner = Spinner("color:#337ab7;font-size:1em;")
         ipw.dlink((self.app, 'busy'), (self.spinner, 'enabled'))
@@ -115,7 +115,7 @@ class AppManagerWidget(ipw.VBox):
                 self.install_environment_button
             ]),
             ipw.HBox([self.install_info]),
-            ipw.HBox([self.detachment_indicator, self.detachment_ignore]),
+            ipw.HBox([self.blocked_operation_indicator, self.blocked_operation_ignore]),
         ]
 
         self.version_selector = VersionSelectorWidget()
@@ -159,7 +159,7 @@ class AppManagerWidget(ipw.VBox):
 
         raise ValueError("Unknown version format: '{}'".format(version))
 
-    def _refresh_widget_state(self, _=None):
+    def _refresh_widget_state(self, _=None):  # pylint: disable=too-many-statements
         """Refresh the widget to reflect the current state of the app."""
         with self.hold_trait_notifications():
             # Collect information about app state.
@@ -167,18 +167,12 @@ class AppManagerWidget(ipw.VBox):
             installed_version = self.app.installed_version
             busy = self.app.busy
             detached = self.app.detached
+            compatible = self.app.compatible
             available_versions = self.app.available_versions
 
-            override = detached and self.detachment_ignore.value
-            blocked = detached and not self.detachment_ignore.value
-
             # Prepare warning icons and messages depending on whether we override or not.
-            # These messages and icons are only shown if needed.
-            warn_or_ban_icon = "ban" if blocked else "warning"
-            if override:
-                tooltip = "Operation will lead to potential loss of local modifications!"
-            else:
-                tooltip = "Operation blocked due to local modifications."
+            override = self.blocked_operation_ignore.value
+            warn_or_ban_icon = "warning" if override else "ban"
 
             # Determine whether we can install, updated, and uninstall.
             can_switch = installed_version != self.version_selector.version_to_install.value and available_versions
@@ -190,22 +184,33 @@ class AppManagerWidget(ipw.VBox):
                 can_update = None
 
             # Update the install button state.
-            self.install_button.disabled = busy or blocked or not can_install
+            self.install_button.disabled = busy or ((detached or not compatible) and not override) or not can_install
             self.install_button.button_style = 'info' if can_install else ''
             self.install_button.icon = '' if can_install and not detached else warn_or_ban_icon if can_install else ''
-            self.install_button.tooltip = '' if can_install and not detached else tooltip if can_install else ''
+            tooltips = []
+            if can_install:
+                if detached:
+                    tooltips.append("App is in a detached state, installing a different version may lead to data loss.")
+                if not compatible:
+                    tooltips.append("The app's prerequisites are incompatible with the system environment. "
+                                    "The app is likely not going to work as expected.")
+            elif installed:
+                tooltips.append("The app and the selected version are already installed.")
+
+            self.install_button.tooltip = ' '.join(tooltips)
             self.install_button.description = 'Install' if not (installed and can_switch) \
                     else f'Install ({self._formatted_version(self.version_selector.version_to_install.value)})'
 
             # Update the uninstall button state.
-            self.uninstall_button.disabled = busy or blocked or not can_uninstall
+            self.uninstall_button.disabled = busy or (detached and not override) or not can_uninstall
             self.uninstall_button.button_style = 'danger' if can_uninstall else ''
             self.uninstall_button.icon = \
                 "" if can_uninstall and not detached else warn_or_ban_icon if can_uninstall else ""
-            self.uninstall_button.tooltip = '' if can_uninstall and not detached else tooltip if can_uninstall else ''
+            self.uninstall_button.tooltip = \
+                    "The app is in a detached state, uninstalling it may lead to data loss." if detached else ''
 
             # Update the update button state.
-            self.update_button.disabled = busy or blocked or not can_update
+            self.update_button.disabled = busy or ((detached or not compatible) and not override) or not can_update
             if self.app.is_installed() and can_update is None:
                 self.update_button.icon = 'warning'
                 self.update_button.tooltip = 'Unable to determine availability of updates.'
@@ -213,23 +218,27 @@ class AppManagerWidget(ipw.VBox):
                 self.update_button.icon = \
                     "circle-up" if can_update and not detached else warn_or_ban_icon if can_update else ""
                 self.update_button.button_style = 'success' if can_update else ''
-                self.update_button.tooltip = '' if can_update and not detached else tooltip if can_update else ''
+                tooltip = \
+                        "The app is in a detached state, updating it may lead to data loss." if detached \
+                        else "Update the app to the latest version."
+                self.update_button.tooltip = tooltip if can_update else ""
 
             # Update the version_selector widget state.
             more_than_one_version = len(self.version_selector.version_to_install.options) > 1
-            self.version_selector.disabled = busy or blocked or not more_than_one_version
+            self.version_selector.disabled = busy or (detached and not override) or not more_than_one_version
 
             # Indicate whether there are local modifications and present option for user override.
             if detached:
-                self.detachment_indicator.value = \
+                self.blocked_operation_indicator.value = \
                     f'<i class="fa fa-{warn_or_ban_icon}"> The app is modified or the installed version '\
                     'is not on the specified release line.'
             else:
-                self.detachment_indicator.value = ''
-            self.detachment_ignore.layout.visibility = 'visible' if detached else 'hidden'
+                self.blocked_operation_indicator.value = ''
+            self.blocked_operation_ignore.layout.visibility = 'visible' if (detached or not compatible) else 'hidden'
 
-            self.install_environment_button.layout.visibility = 'visible' if self.app.environment_message else 'hidden'
-            self.install_environment_button.disabled = busy or not self.app.environment_message
+            self.install_environment_button.layout.visibility = 'visible' if (
+                self.app._has_dependencies() and self.app.environment_message) else 'hidden'  # pylint: disable=protected-access
+            self.install_environment_button.disabled = busy or not compatible or not self.app.environment_message
 
     def _show_msg_progress(self, msg):
         """Show a message indicating currently executed operation."""
@@ -245,9 +254,7 @@ class AppManagerWidget(ipw.VBox):
 
     def _check_detached_state(self):
         """Check whether the app is in a detached state which would prevent any install or other operations."""
-        self.app.refresh()
-        self._refresh_widget_state()
-        blocked = self.app.detached and not self.detachment_ignore.value
+        blocked = self.app.detached and not self.blocked_operation_ignore.value
         if blocked:
             raise RuntimeError("Unable to perform operation, the app is in a detached state.")
 
