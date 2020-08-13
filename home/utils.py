@@ -8,8 +8,6 @@ from markdown import markdown
 import ipywidgets as ipw
 from aiidalab.config import AIIDALAB_APPS
 
-raise RuntimeError("Every tests should fail.")
-
 
 def load_widget(name):
     if path.exists(path.join(AIIDALAB_APPS, name, 'start.py')):
