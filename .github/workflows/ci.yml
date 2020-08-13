@@ -28,3 +28,9 @@ jobs:
           image: aiidalab/aiidalab-docker-stack:${{ matrix.tag }}
           browser: ${{ matrix.browser }}
           notebooks: appstore.ipynb,start.ipynb
+
+      - name: Upload screenshots as artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: Screenshots-${{ matrix.tag }}-${{ matrix.browser }}
+          path: 'screenshots/'
