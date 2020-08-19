@@ -13,7 +13,7 @@ jobs:
 
     strategy:
       matrix:
-        tag: [ stable, latest ]
+        tag: [ latest ]
         browser: [ chrome, firefox ]
       fail-fast: false
 
