@@ -13,7 +13,7 @@ jobs:
 
     strategy:
       matrix:
-        tag: [ stable, latest ]
+        tag: [ latest ]
         browser: [ chrome, firefox ]
       fail-fast: false
 
@@ -27,4 +27,11 @@ jobs:
         with:
           image: aiidalab/aiidalab-docker-stack:${{ matrix.tag }}
           browser: ${{ matrix.browser }}
-          notebooks: appstore.ipynb,start.ipynb
+          name: home
+
+      - name: Upload screenshots as artifacts
+        uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: Screenshots-${{ matrix.tag }}-${{ matrix.browser }}
+          path: 'screenshots/'
