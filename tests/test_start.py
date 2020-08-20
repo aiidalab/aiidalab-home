@@ -15,7 +15,7 @@ def get_new_windows(selenium, timeout=2):
 def test_click_appstore(selenium, url):
     selenium.get(url("apps/apps/home/start.ipynb"))
     with get_new_windows(selenium) as handles:
-        sleep(5)
+        time.sleep(5)
         selenium.find_element(By.CSS_SELECTOR, ".fa-puzzle-piece").click()
     assert len(handles) == 1
     selenium.switch_to.window(handles.pop())
