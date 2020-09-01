@@ -123,6 +123,9 @@ class AiidaLabAppStore(ipw.HBox):
         end = (page + 1) * self.items_per_page.value
         with self.output:
             for number, app_base in enumerate(self.apps_to_display[start:end]):
+                if app_base.name == 'home':
+                    continue  # Disable management of home app through UI.
+
                 if self.category_filter.value and self.app_corresponding_categories[start:end][number]:
                     display(ipw.HTML("<h1>{}</h1>".format(
                         self.app_corresponding_categories[start:end][number].title())))
