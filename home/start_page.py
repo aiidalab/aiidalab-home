@@ -170,9 +170,10 @@ class AppWidget(ipw.VBox):
 
 
         header = ipw.HBox(header_items)
+        header.layout.margin = None if allow_manage else "20px 0px 0px 0px"
 
         footer = ipw.HTML(' '.join(footer_items), layout={'width': 'initial'})
-        footer.layout.margin = "0px 0px 0px 700px"
+        footer.layout.margin = "0px 0px 0px 700px" if allow_manage else "0px 0px 20px 0px"
 
         super().__init__(children=[header, body, footer])
 
