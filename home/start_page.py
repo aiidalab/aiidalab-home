@@ -71,7 +71,7 @@ class AiidaLabHome:
         app = AiidaLabApp(name, app_data, AIIDALAB_APPS)
 
         if name == 'home':
-            app_widget = AppWidget(app, allow_move=False)
+            app_widget = AppWidget(app, allow_move=False, allow_manage=False)
         else:
             app_widget = CollapsableAppWidget(app, allow_move=True)
             app_widget.hidden = name in config['hidden']
@@ -143,15 +143,24 @@ class AiidaLabHome:
 class AppWidget(ipw.VBox):
     """Widget that represents an app as part of the home page."""
 
-    def __init__(self, app, allow_move=False):
+    def __init__(self, app, allow_move=False, allow_manage=True):
         self.app = app
 
         launcher = load_widget(app.name)
         launcher.layout = ipw.Layout(width="900px")
 
-        update_info = UpdateAvailableInfoWidget()
-        ipw.dlink((app, 'updates_available'), (update_info, 'updates_available'))
-        update_info.layout.margin = "0px 0px 0px 800px"
+        header_items = []
+        footer_items = []
+
+        if allow_manage:
+            update_info = UpdateAvailableInfoWidget()
+            ipw.dlink((app, 'updates_available'), (update_info, 'updates_available'))
+            update_info.layout.margin = "0px 0px 0px 800px"
+            header_items.append(update_info)
+
+            footer_items.append("<a href=./single_app.ipynb?app={}><button>Manage App</button></a>".format(app.name))
+            if app.url:
+                footer_items.append('<a href="{}"><button>URL</button></a>'.format(app.url))
 
         if allow_move:
             app_widget_move_buttons = create_app_widget_move_buttons(app.name)
@@ -159,13 +168,13 @@ class AppWidget(ipw.VBox):
         else:
             body = launcher
 
-        footer = ipw.HTML("<a href=./single_app.ipynb?app={}><button>Manage App</button></a>".format(app.name),
-                          layout={'width': 'initial'})
-        if app.url:
-            footer.value += ' <a href="{}"><button>URL</button></a>'.format(app.url)
+
+        header = ipw.HBox(header_items)
+
+        footer = ipw.HTML(' '.join(footer_items), layout={'width': 'initial'})
         footer.layout.margin = "0px 0px 0px 700px"
 
-        super().__init__(children=[update_info, body, footer])
+        super().__init__(children=[header, body, footer])
 
 
 class CollapsableAppWidget(ipw.Accordion):
