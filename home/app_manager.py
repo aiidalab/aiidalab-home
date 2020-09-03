@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Module that contains widgets for managing AiiDA lab applications."""
 
+import re
 from subprocess import CalledProcessError
 
 import traitlets
@@ -132,6 +133,9 @@ class AppManagerWidget(ipw.VBox):
 
         if not version:  # will be displayed during transition phases
             return '[n/a]'
+
+        if version.startswith('git:refs/remotes/'):  # remote branch
+            return re.sub('git:refs\/remotes\/(.+?)\/', '', version) + ' (latest)'
 
         if version.startswith('git:refs/heads/'):  # branch
             return f"{version[len('git:refs/heads/'):]} (latest)"
