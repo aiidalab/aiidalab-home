@@ -64,6 +64,12 @@ class AppManagerWidget(ipw.VBox):
     versions if possible.
     """
 
+    COMPATIBILTIY_WARNING = Template("""<p style="background-color:#FFCC00; text-align:center;">
+    <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
+    The installed version of this app is not supported for this AiiDAlab environment.
+    <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
+    </p>""")
+
     TEMPLATE = Template("""<b> <div style="font-size: 30px; text-align:center;">{{ app.title }}</div></b>
     <br>
     <b>Authors:</b> {{ app.authors }}
@@ -76,6 +82,10 @@ class AppManagerWidget(ipw.VBox):
 
     def __init__(self, app, with_version_selector=False):
         self.app = app
+
+        self.compatibility_warning = ipw.HTML(self.COMPATIBILTIY_WARNING.render())
+        self.compatibility_warning.layout = {'width': '600px'}
+        self.compatibility_warning.layout.visibility = 'hidden'
 
         body = ipw.HTML(self.TEMPLATE.render(app=app))
         body.layout = {'width': '600px'}
@@ -101,6 +111,7 @@ class AppManagerWidget(ipw.VBox):
         ipw.dlink((self.app, 'busy'), (self.spinner, 'enabled'))
 
         children = [
+            ipw.HBox([self.compatibility_warning]),
             ipw.HBox([load_logo(app), body]),
             ipw.HBox([self.uninstall_button, self.install_button, self.update_button, self.spinner]),
             ipw.HBox([self.install_info]),
@@ -115,7 +126,7 @@ class AppManagerWidget(ipw.VBox):
         self.version_selector.layout.visibility = 'visible' if with_version_selector else 'hidden'
         self.version_selector.disabled = True
         self.version_selector.version_to_install.observe(self._refresh_widget_state, 'value')
-        children.insert(1, self.version_selector)
+        children.insert(2, self.version_selector)
 
         super().__init__(children=children)
 
@@ -160,6 +171,10 @@ class AppManagerWidget(ipw.VBox):
 
             override = detached and self.detachment_ignore.value
             blocked = detached and not self.detachment_ignore.value
+
+            # Check app compatibility and show banner if not compatible.
+            self.compatibility_warning.layout.visibility = \
+                    'visible' if self.app.compatible is False else 'hidden'
 
             # Prepare warning icons and messages depending on whether we override or not.
             # These messages and icons are only shown if needed.
