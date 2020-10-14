@@ -189,10 +189,11 @@ class AppManagerWidget(ipw.VBox):
 
             # Determine whether we can install, updated, and uninstall.
             can_switch = installed_version != self.version_selector.version_to_install.value and available_versions
-            can_install = can_switch or not installed
+            latest_selected = self.version_selector.version_to_install.index == 0
+            can_install = (can_switch and (detached or not latest_selected)) or not installed
             can_uninstall = installed
             try:
-                can_update = self.app.updates_available and not can_install
+                can_update = self.app.updates_available and installed
             except RuntimeError:
                 can_update = None
 
@@ -201,11 +202,13 @@ class AppManagerWidget(ipw.VBox):
             self.install_button.button_style = 'info' if can_install else ''
             self.install_button.icon = '' if can_install and not detached else warn_or_ban_icon if can_install else ''
             if self.app.compatible:
-                self.install_button.tooltip = '' if can_install and not detached else tooltip_danger if can_install else ''
+                self.install_button.tooltip = '' if can_install and not detached else \
+                        tooltip_danger if can_install else ''
             else:
-                self.install_button.tooltip = '' if installed and not detached else tooltip_danger if installed else tooltip_incompatible
-            self.install_button.description = 'Install' if not (installed and can_switch) \
-                    else f'Install ({self._formatted_version(self.version_selector.version_to_install.value)})'
+                self.install_button.tooltip = '' if installed and not detached else \
+                        tooltip_danger if installed else tooltip_incompatible
+            self.install_button.description = 'Install' if not (installed and can_install) else \
+                    f'Install ({self._formatted_version(self.version_selector.version_to_install.value)})'
 
             # Update the uninstall button state.
             self.uninstall_button.disabled = busy or blocked_uninstall or not can_uninstall
