@@ -91,7 +91,7 @@ class AppManagerWidget(ipw.VBox):
         body.layout = {'width': '600px'}
 
         # Setup install_info
-        self.install_info = StatusHTML()
+        self.install_info = StatusHTML(message="<p><br></p>")  # show empty line by default
 
         # Setup buttons
         self.install_button = ipw.Button(description='Install', disabled=True)
@@ -103,9 +103,9 @@ class AppManagerWidget(ipw.VBox):
         self.update_button = ipw.Button(description='Update', disabled=True)
         self.update_button.on_click(self._update_app)
 
-        self.detachment_indicator = ipw.HTML()
-        self.detachment_ignore = ipw.Checkbox(description="Ignore")
-        self.detachment_ignore.observe(self._refresh_widget_state)
+        self.issue_indicator = ipw.HTML()
+        self.blocked_ignore = ipw.Checkbox(description="Ignore")
+        self.blocked_ignore.observe(self._refresh_widget_state)
 
         self.spinner = Spinner("color:#337ab7;font-size:1em;")
         ipw.dlink((self.app, 'busy'), (self.spinner, 'enabled'))
@@ -115,7 +115,7 @@ class AppManagerWidget(ipw.VBox):
             ipw.HBox([load_logo(app), body]),
             ipw.HBox([self.uninstall_button, self.install_button, self.update_button, self.spinner]),
             ipw.HBox([self.install_info]),
-            ipw.HBox([self.detachment_indicator, self.detachment_ignore]),
+            ipw.HBox([self.issue_indicator, self.blocked_ignore]),
         ]
 
         self.version_selector = VersionSelectorWidget()
@@ -165,51 +165,57 @@ class AppManagerWidget(ipw.VBox):
             # Collect information about app state.
             installed = self.app.is_installed()
             installed_version = self.app.installed_version
+            compatible = len(self.app.available_versions) > 0
             busy = self.app.busy
             detached = self.app.detached
             available_versions = self.app.available_versions
 
-            override = detached and self.detachment_ignore.value
-            blocked = detached and not self.detachment_ignore.value
+            override = detached and self.blocked_ignore.value
+            blocked_install = (detached or not compatible) and not self.blocked_ignore.value
+            blocked_uninstall = detached and not self.blocked_ignore.value
 
             # Check app compatibility and show banner if not compatible.
             self.compatibility_warning.layout.visibility = \
-                    'visible' if self.app.compatible is False else 'hidden'
+                    'visible' if (self.app.is_installed() and self.app.compatible is False) else 'hidden'
 
             # Prepare warning icons and messages depending on whether we override or not.
             # These messages and icons are only shown if needed.
-            warn_or_ban_icon = "ban" if blocked else "warning"
+            warn_or_ban_icon = "warning" if override else "ban"
             if override:
-                tooltip = "Operation will lead to potential loss of local modifications!"
+                tooltip_danger = "Operation will lead to potential loss of local modifications!"
             else:
-                tooltip = "Operation blocked due to local modifications."
+                tooltip_danger = "Operation blocked due to local modifications."
+            tooltip_incompatible = "The app is not supported for this version of the environment."
 
             # Determine whether we can install, updated, and uninstall.
             can_switch = installed_version != self.version_selector.version_to_install.value and available_versions
             can_install = can_switch or not installed
-            can_uninstall = self.app.is_installed()
+            can_uninstall = installed
             try:
                 can_update = self.app.updates_available and not can_install
             except RuntimeError:
                 can_update = None
 
             # Update the install button state.
-            self.install_button.disabled = busy or blocked or not can_install
+            self.install_button.disabled = busy or blocked_install or not can_install
             self.install_button.button_style = 'info' if can_install else ''
             self.install_button.icon = '' if can_install and not detached else warn_or_ban_icon if can_install else ''
-            self.install_button.tooltip = '' if can_install and not detached else tooltip if can_install else ''
+            if self.app.compatible:
+                self.install_button.tooltip = '' if can_install and not detached else tooltip_danger if can_install else ''
+            else:
+                self.install_button.tooltip = '' if installed and not detached else tooltip_danger if installed else tooltip_incompatible
             self.install_button.description = 'Install' if not (installed and can_switch) \
                     else f'Install ({self._formatted_version(self.version_selector.version_to_install.value)})'
 
             # Update the uninstall button state.
-            self.uninstall_button.disabled = busy or blocked or not can_uninstall
+            self.uninstall_button.disabled = busy or blocked_uninstall or not can_uninstall
             self.uninstall_button.button_style = 'danger' if can_uninstall else ''
             self.uninstall_button.icon = \
                 "" if can_uninstall and not detached else warn_or_ban_icon if can_uninstall else ""
-            self.uninstall_button.tooltip = '' if can_uninstall and not detached else tooltip if can_uninstall else ''
+            self.uninstall_button.tooltip = '' if can_uninstall and not detached else tooltip_danger if can_uninstall else ''
 
             # Update the update button state.
-            self.update_button.disabled = busy or blocked or not can_update
+            self.update_button.disabled = busy or blocked_install or not can_update
             if self.app.is_installed() and can_update is None:
                 self.update_button.icon = 'warning'
                 self.update_button.tooltip = 'Unable to determine availability of updates.'
@@ -217,20 +223,23 @@ class AppManagerWidget(ipw.VBox):
                 self.update_button.icon = \
                     "circle-up" if can_update and not detached else warn_or_ban_icon if can_update else ""
                 self.update_button.button_style = 'success' if can_update else ''
-                self.update_button.tooltip = '' if can_update and not detached else tooltip if can_update else ''
+                self.update_button.tooltip = '' if can_update and not detached else tooltip_danger if can_update else ''
 
             # Update the version_selector widget state.
             more_than_one_version = len(self.version_selector.version_to_install.options) > 1
-            self.version_selector.disabled = busy or blocked or not more_than_one_version
+            self.version_selector.disabled = busy or blocked_install or not more_than_one_version
 
             # Indicate whether there are local modifications and present option for user override.
             if detached:
-                self.detachment_indicator.value = \
+                self.issue_indicator.value = \
                     f'<i class="fa fa-{warn_or_ban_icon}"> The app is modified or the installed version '\
                     'is not on the specified release line.'
+            elif not compatible:
+                self.issue_indicator.value = \
+                    f'<i class="fa fa-{warn_or_ban_icon}"> The app is not supported for this version of the environment.'
             else:
-                self.detachment_indicator.value = ''
-            self.detachment_ignore.layout.visibility = 'visible' if detached else 'hidden'
+                self.issue_indicator.value = ''
+            self.blocked_ignore.layout.visibility = 'visible' if (detached or not compatible) else 'hidden'
 
     def _show_msg_success(self, msg):
         """Show a message indicating successful execution of a requested operation."""
@@ -244,7 +253,7 @@ class AppManagerWidget(ipw.VBox):
         """Check whether the app is in a detached state which would prevent any install or other operations."""
         self.app.refresh()
         self._refresh_widget_state()
-        blocked = self.app.detached and not self.detachment_ignore.value
+        blocked = self.app.detached and not self.blocked_ignore.value
         if blocked:
             raise RuntimeError("Unable to perform operation, the app is in a detached state.")
 
@@ -260,13 +269,14 @@ class AppManagerWidget(ipw.VBox):
             self._show_msg_success(f"Installed app ({self._formatted_version(version)}).")
 
     def _update_app(self, _):
-        """Attempt to uninstall the app."""
+        """Attempt to update the app."""
         try:
             self._check_detached_state()
-            self.app.update_app()
+            version = self.app.update_app()
         except (AssertionError, RuntimeError, CalledProcessError) as error:
             self._show_msg_failure(str(error))
         else:
+            self.version_selector.version_to_install.value = version
             self._show_msg_success("Updated app.")
 
     def _uninstall_app(self, _):
