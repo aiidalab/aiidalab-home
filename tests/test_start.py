@@ -15,10 +15,10 @@ def get_new_windows(selenium, timeout=2):
 def test_click_appstore(selenium, url):
     selenium.get(url("apps/apps/home/start.ipynb"))
     with get_new_windows(selenium) as handles:
-        time.sleep(5)
         selenium.find_element(By.CSS_SELECTOR, ".fa-puzzle-piece").click()
     assert len(handles) == 1
     selenium.switch_to.window(handles.pop())
+    time.sleep(10)
     dropdown = selenium.find_element(By.XPATH, "//div[@id=\'notebook-container\']/div[5]/div[2]/div[2]/div/div[3]/div/div[2]/div/select")
     dropdown.find_element(By.XPATH, "//option[. = 'Utilities']").click()
     selenium.find_element(By.CSS_SELECTOR, ".widget-button:nth-child(1)").click()
