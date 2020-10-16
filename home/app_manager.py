@@ -213,8 +213,7 @@ class AppManagerWidget(ipw.VBox):
             # Update the uninstall button state.
             self.uninstall_button.disabled = busy or blocked_uninstall or not can_uninstall
             self.uninstall_button.button_style = 'danger' if can_uninstall else ''
-            self.uninstall_button.icon = \
-                "" if can_uninstall and not detached else warn_or_ban_icon if can_uninstall else ""
+            self.uninstall_button.icon = warn_or_ban_icon if detached else 'trash-o'
             self.uninstall_button.tooltip = '' if can_uninstall and not detached else tooltip_danger if can_uninstall else ''
 
             # Update the update button state.
@@ -224,7 +223,7 @@ class AppManagerWidget(ipw.VBox):
                 self.update_button.tooltip = 'Unable to determine availability of updates.'
             else:
                 self.update_button.icon = \
-                    "circle-up" if can_update and not detached else warn_or_ban_icon if can_update else ""
+                    "arrow-circle-up" if can_update and not detached else warn_or_ban_icon if can_update else ""
                 self.update_button.button_style = 'success' if can_update else ''
                 self.update_button.tooltip = '' if can_update and not detached else tooltip_danger if can_update else ''
 
@@ -235,11 +234,11 @@ class AppManagerWidget(ipw.VBox):
             # Indicate whether there are local modifications and present option for user override.
             if detached:
                 self.issue_indicator.value = \
-                    f'<i class="fa fa-{warn_or_ban_icon}"> The app is modified or the installed version '\
+                    f'<i class="fa fa-{warn_or_ban_icon}"></i> The app is modified or the installed version '\
                     'is not on the specified release line.'
             elif not compatible:
                 self.issue_indicator.value = \
-                    f'<i class="fa fa-{warn_or_ban_icon}"> The app is not supported for this version of the environment.'
+                    f'<i class="fa fa-{warn_or_ban_icon}"></i> The app is not supported for this version of the environment.'
             else:
                 self.issue_indicator.value = ''
             self.blocked_ignore.layout.visibility = 'visible' if (detached or not compatible) else 'hidden'
