@@ -153,10 +153,11 @@ class AppWidget(ipw.VBox):
         footer_items = []
 
         if allow_manage:
-            update_info = AppStatusInfoWidget()
-            ipw.dlink((app, 'updates_available'), (update_info, 'updates_available'))
-            update_info.layout.margin = "0px 0px 0px 800px"
-            header_items.append(update_info)
+            app_status_info = AppStatusInfoWidget()
+            for trait in ('detached', 'compatible', 'updates_available'):
+                ipw.dlink((app, trait), (app_status_info, trait))
+            app_status_info.layout.margin = "0px 0px 0px 800px"
+            header_items.append(app_status_info)
 
             footer_items.append("<a href=./single_app.ipynb?app={}><button>Manage App</button></a>".format(app.name))
             if app.url:

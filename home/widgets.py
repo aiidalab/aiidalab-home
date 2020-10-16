@@ -62,9 +62,19 @@ class StatusHTML(_StatusWidgetMixin, ipw.HTML):
 class AppStatusInfoWidget(ipw.HTML):
     """Widget that indicates whether an update is available."""
 
+    detached = traitlets.Bool(allow_none=True)
+    compatible = traitlets.Bool(allow_none=True)
     updates_available = traitlets.Bool(allow_none=True)
 
-    MESSAGES = {
+    MESSAGE_INIT = """<i class='fa fa-ellipsis-h'></i> Loading..."""
+
+    MESSAGE_INCOMPATIBLE = \
+            """<i class='fa fa-exclamation-circle'></i> Incompatible"""
+
+    MESSAGE_DETACHED = \
+            """<i class="fa fa-times-circle" aria-hidden="true"></i> Detached"""
+
+    MESSAGES_UPDATES = {
         None:
             """<font color="#D8000C"><i class='fa fa-times-circle'></i> """\
             """Unable to determine availability of updates.</font>""",
@@ -74,13 +84,20 @@ class AppStatusInfoWidget(ipw.HTML):
             """<font color="#270"><i class='fa fa-check'></i> Latest Version</font>""",
     }
 
-    def __init__(self, updates_available=None, **kwargs):
-        super().__init__(updates_available=None, **kwargs)
-        self._observe_updates_available(dict(new=updates_available))  # initialize
 
-    @traitlets.observe('updates_available')
-    def _observe_updates_available(self, change):
-        self.value = self.MESSAGES[change['new']]
+    def __init__(self, value=None, **kwargs):
+        if value is None:
+            value = self.MESSAGE_INIT
+        super().__init__(value=value, **kwargs)
+        self.observe(self._refresh, names=['detached', 'compatible', 'updates_available'])
+
+    def _refresh(self, _=None):
+        if self.detached is True:
+            self.value = self.MESSAGE_DETACHED
+        elif self.compatible is False:
+            self.value = self.MESSAGE_INCOMPATIBLE
+        else:
+            self.value = self.MESSAGES_UPDATES[self.updates_available]
 
 
 class Spinner(ipw.HTML):
