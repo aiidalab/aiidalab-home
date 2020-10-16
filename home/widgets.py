@@ -59,7 +59,7 @@ class StatusHTML(_StatusWidgetMixin, ipw.HTML):
         self.show_temporary_message(change['new'])
 
 
-class UpdateAvailableInfoWidget(ipw.HTML):
+class AppStatusInfoWidget(ipw.HTML):
     """Widget that indicates whether an update is available."""
 
     updates_available = traitlets.Bool(allow_none=True)

@@ -14,7 +14,7 @@ from aiidalab.config import AIIDALAB_APPS
 from aiidalab.utils import load_app_registry
 
 from home.utils import load_widget
-from home.widgets import UpdateAvailableInfoWidget
+from home.widgets import AppStatusInfoWidget
 
 
 def create_app_widget_move_buttons(name):
@@ -153,7 +153,7 @@ class AppWidget(ipw.VBox):
         footer_items = []
 
         if allow_manage:
-            update_info = UpdateAvailableInfoWidget()
+            update_info = AppStatusInfoWidget()
             ipw.dlink((app, 'updates_available'), (update_info, 'updates_available'))
             update_info.layout.margin = "0px 0px 0px 800px"
             header_items.append(update_info)
