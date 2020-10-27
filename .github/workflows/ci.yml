@@ -22,6 +22,18 @@ jobs:
       - name: Check out app
         uses: actions/checkout@v2
 
+      - name: Check out aiidalab
+        uses: actions/checkout@v2
+        with:
+          repository: aiidalab/aiidalab
+          path: '.aiidalab-develop'
+          ref: 'develop'
+          clean: false
+
+      - name: Link aiidalab into home app
+        run: |
+          ln -s "${GITHUB_WORKSPACE}/.aiidalab-develop/aiidalab" "${GITHUB_WORKSPACE}/aiidalab"
+
       - name: Test app
         uses: aiidalab/aiidalab-test-app-action@v2
         with:
