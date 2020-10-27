@@ -80,7 +80,7 @@ class AppStatusInfoWidget(ipw.HTML):
             f'{Theme.ICONS.APP_DETACHED} Modified</font></div>'
 
     TOOLTIP_APP_INCOMPATIBLE = \
-            "None of the available app versions support the current AiiDAlab environment. "\
+            "None of the available app versions are compatible with this AiiDAlab environment. "\
             "You can continue using this app, but be advised that you might encounter "\
             "compatibility issues."
 
@@ -89,8 +89,8 @@ class AppStatusInfoWidget(ipw.HTML):
             f'{Theme.ICONS.APP_INCOMPATIBLE} App incompatible</font></div>'
 
     TOOLTIP_APP_VERSION_INCOMPATIBLE = \
-            'The currently installed version of this app is not supported for this '\
-            'AiiDAlab environment. Click on &quot;Manage App&quot; to install a supported version '\
+            'The currently installed version of this app is not compatible with this '\
+            'AiiDAlab environment. Click on &quot;Manage App&quot; to install a compatible version '\
             'and avoid compatibility isssues.'
 
     MESSAGE_APP_VERSION_INCOMPATIBLE = \

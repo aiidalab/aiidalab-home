@@ -66,7 +66,7 @@ class AppManagerWidget(ipw.VBox):
 
     COMPATIBILTIY_WARNING = Template("""<p style="background-color:#FFCC00; text-align:center;">
     <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
-    The installed version of this app is not supported for this AiiDAlab environment.
+    The installed version of this app is not compatible with this AiiDAlab environment.
     <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
     </p>""")
 
