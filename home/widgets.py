@@ -62,7 +62,15 @@ class StatusHTML(_StatusWidgetMixin, ipw.HTML):
 
 
 class AppStatusInfoWidget(ipw.HTML):
-    """Widget that indicates whether an update is available."""
+    """Widget that indicates information about the app's installation status.
+
+    The indicated information includes:
+
+        - whether the app is detached (e.g. via local modifications)
+        - whether the installed version and/or any version is compatible
+        - there are updates available for installation
+        - an update is required
+    """
 
     detached = traitlets.Bool(allow_none=True)
     compatible = traitlets.Bool(allow_none=True)
