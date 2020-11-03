@@ -6,6 +6,8 @@ from threading import Timer
 import traitlets
 import ipywidgets as ipw
 
+from .themes import ThemeDefault as Theme
+
 
 class _StatusWidgetMixin(traitlets.HasTraits):
     """Show temporary messages for example for status updates.
@@ -59,28 +61,81 @@ class StatusHTML(_StatusWidgetMixin, ipw.HTML):
         self.show_temporary_message(change['new'])
 
 
-class UpdateAvailableInfoWidget(ipw.HTML):
-    """Widget that indicates whether an update is available."""
+class AppStatusInfoWidget(ipw.HTML):
+    """Widget that indicates information about the app's installation status.
 
+    The indicated information includes:
+
+        - whether the app is detached (e.g. via local modifications)
+        - whether the installed version and/or any version is compatible
+        - there are updates available for installation
+        - an update is required
+    """
+
+    detached = traitlets.Bool(allow_none=True)
+    compatible = traitlets.Bool(allow_none=True)
     updates_available = traitlets.Bool(allow_none=True)
 
-    MESSAGES = {
+    MESSAGE_INIT = \
+            f'<div>{Theme.ICONS.LOADING} Loading...</div>'
+
+    TOOLTIP_DETACHED = \
+            'The app is in a detached state - likely due to local modifications - '\
+            'which means the ability to manage the app via the AiiDAlab interface is reduced.'
+
+    MESSAGE_DETACHED = \
+            f'<div title="{TOOLTIP_DETACHED}"><font color="{Theme.COLORS.GRAY}">'\
+            f'{Theme.ICONS.APP_DETACHED} Modified</font></div>'
+
+    TOOLTIP_APP_INCOMPATIBLE = \
+            "None of the available app versions are compatible with this AiiDAlab environment. "\
+            "You can continue using this app, but be advised that you might encounter "\
+            "compatibility issues."
+
+    MESSAGE_APP_INCOMPATIBLE = \
+            f'<div title="{TOOLTIP_APP_INCOMPATIBLE}"><font color="{Theme.COLORS.DANGER}">'\
+            f'{Theme.ICONS.APP_INCOMPATIBLE} App incompatible</font></div>'
+
+    TOOLTIP_APP_VERSION_INCOMPATIBLE = \
+            'The currently installed version of this app is not compatible with this '\
+            'AiiDAlab environment. Click on &quot;Manage App&quot; to install a compatible version '\
+            'and avoid compatibility isssues.'
+
+    MESSAGE_APP_VERSION_INCOMPATIBLE = \
+            f'<div title="{TOOLTIP_APP_VERSION_INCOMPATIBLE}"><font color="{Theme.COLORS.WARNING}">'\
+            f'{Theme.ICONS.APP_VERSION_INCOMPATIBLE} Update required</font></div>'
+
+    MESSAGES_UPDATES = {
         None:
-            """<font color="#D8000C"><i class='fa fa-times-circle'></i> """\
-            """Unable to determine availability of updates.</font>""",
+            '<div title="Encountered unknown problem while trying to determine whether '
+            'updates are available for this app.>'\
+            f'<font color="{Theme.COLORS.WARNING}">{Theme.ICONS.APP_UPDATE_AVAILABLE_UNKNOWN} '\
+            'Unable to determine availability of updates.</font></div>',
         True:
-            """<font color="#9F6000"><i class='fa fa-warning'></i> Update Available</font>""",
+            '<div title="Click on &quot;Manage app&quot; to install a newer version of this app.">'\
+            f'<font color="{Theme.COLORS.NOTIFY}">{Theme.ICONS.APP_UPDATE_AVAILABLE} Update available</font></div>',
         False:
-            """<font color="#270"><i class='fa fa-check'></i> Latest Version</font>""",
+            '<div title="The currently installed version of this app is the latest available version.">'\
+            f'<font color="{Theme.COLORS.CHECK}">{Theme.ICONS.APP_NO_UPDATE_AVAILABLE} Latest version</font></div>',
     }
 
-    def __init__(self, updates_available=None, **kwargs):
-        super().__init__(updates_available=None, **kwargs)
-        self._observe_updates_available(dict(new=updates_available))  # initialize
 
-    @traitlets.observe('updates_available')
-    def _observe_updates_available(self, change):
-        self.value = self.MESSAGES[change['new']]
+    def __init__(self, value=None, **kwargs):
+        if value is None:
+            value = self.MESSAGE_INIT
+        super().__init__(value=value, **kwargs)
+        self.observe(self._refresh, names=['detached', 'compatible', 'updates_available'])
+
+    def _refresh(self, _=None):
+        if self.detached is True:
+            self.value = self.MESSAGE_DETACHED
+        elif self.compatible is False:
+            if self.updates_available:
+                self.value = self.MESSAGE_APP_VERSION_INCOMPATIBLE
+            else:
+                self.value = self.MESSAGE_APP_INCOMPATIBLE
+        else:
+            self.value = self.MESSAGES_UPDATES[self.updates_available]
 
 
 class Spinner(ipw.HTML):
