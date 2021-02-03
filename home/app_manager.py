@@ -278,7 +278,6 @@ class AppManagerWidget(ipw.VBox):
         except (AssertionError, RuntimeError, CalledProcessError) as error:
             self._show_msg_failure(str(error))
         else:
-            self.version_selector.version_to_install.value = version
             self._show_msg_success("Updated app.")
 
     def _uninstall_app(self, _):
