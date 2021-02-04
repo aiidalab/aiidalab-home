@@ -64,7 +64,7 @@ class AppManagerWidget(ipw.VBox):
     versions if possible.
     """
 
-    COMPATIBILTIY_WARNING = Template("""<div class="alert alert-warning">
+    COMPATIBILTIY_WARNING = Template("""<div class="alert alert-danger">
     The installed version of this app is not compatible with this AiiDAlab environment.
     </div>""")
 
