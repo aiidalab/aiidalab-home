@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""AiiDA lab app store."""
+"""AiiDAlab app store."""
 
 import ipywidgets as ipw
 from IPython.display import display
@@ -12,7 +12,7 @@ from home.app_manager import AppManagerWidget
 
 
 class AiidaLabAppStore(ipw.HBox):
-    """Class to manage AiiDA lab app store."""
+    """Class to manage AiiDAlab app store."""
 
     def __init__(self):
         requested_dict = load_app_registry()

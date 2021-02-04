@@ -1,4 +1,4 @@
-"""Helpful utilities for the AiiDA lab tools."""
+"""Helpful utilities for the AiiDAlab tools."""
 
 import sys
 from os import path
