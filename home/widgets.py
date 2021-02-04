@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""AiiDA lab basic widgets."""
+"""AiiDAlab basic widgets."""
 
 from threading import Timer
 
