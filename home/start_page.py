@@ -1,4 +1,4 @@
-"""Module to generate AiiDA lab home page."""
+"""Module to generate AiiDAlab home page."""
 from os import path
 from glob import glob
 from functools import wraps
@@ -8,7 +8,7 @@ import traitlets
 import ipywidgets as ipw
 from IPython.display import display
 
-# AiiDA lab imports.
+# AiiDAlab imports.
 from aiidalab.app import AiidaLabApp
 from aiidalab.config import AIIDALAB_APPS
 from aiidalab.utils import load_app_registry
@@ -56,7 +56,7 @@ def _workaround_property_lock_issue(func):
 
 
 class AiidaLabHome:
-    """Class that mananges the appearance of the AiiDA lab home page."""
+    """Class that mananges the appearance of the AiiDAlab home page."""
 
     def __init__(self):
         self.config_fn = ".launcher.json"
