@@ -11,7 +11,6 @@ from IPython.display import display
 # AiiDAlab imports.
 from aiidalab.app import AiidaLabApp
 from aiidalab.config import AIIDALAB_APPS
-from aiidalab.utils import load_app_registry
 
 from home.utils import load_widget
 from home.widgets import AppStatusInfoWidget
@@ -61,14 +60,12 @@ class AiidaLabHome:
     def __init__(self):
         self.config_fn = ".launcher.json"
         self.output = ipw.Output()
-        self.app_registry = load_app_registry()['apps']
         self._app_widgets = dict()
 
     def _create_app_widget(self, name):
         """Create the widget representing the app on the home screen."""
         config = self.read_config()
-        app_data = self.app_registry.get(name, None)
-        app = AiidaLabApp(name, app_data, AIIDALAB_APPS)
+        app = AiidaLabApp(name, None, AIIDALAB_APPS)
 
         if name == 'home':
             app_widget = AppWidget(app, allow_move=False, allow_manage=False)
@@ -160,8 +157,8 @@ class AppWidget(ipw.VBox):
             header_items.append(app_status_info)
 
             footer_items.append("<a href=./single_app.ipynb?app={}><button>Manage App</button></a>".format(app.name))
-            if app.url:
-                footer_items.append('<a href="{}"><button>URL</button></a>'.format(app.url))
+            if app.metadata.get("external_url"):
+                footer_items.append('<a href="{}"><button>URL</button></a>'.format(app.metadata["external_url"]))
 
         if allow_move:
             app_widget_move_buttons = create_app_widget_move_buttons(app.name)

@@ -6,7 +6,8 @@ from IPython.display import display
 from jinja2 import Template
 from aiidalab.app import AiidaLabApp
 from aiidalab.config import AIIDALAB_APPS
-from aiidalab.utils import load_app_registry
+from aiidalab.utils import load_app_registry_entry
+from aiidalab.utils import load_app_registry_index
 
 from home.app_manager import AppManagerWidget
 
@@ -15,13 +16,8 @@ class AiidaLabAppStore(ipw.HBox):
     """Class to manage AiiDAlab app store."""
 
     def __init__(self):
-        requested_dict = load_app_registry()
-        if requested_dict:
-            self.registry_sorted_list = sorted(requested_dict['apps'].items())
-            categories_dict = requested_dict['categories']
-        else:
-            self.registry_sorted_list = []
-        self.app_corresponding_categories = []
+        # TODO: Improve fallback implementation!
+        self.index = load_app_registry_index() or dict(apps=[], categories=[])
         self.output = ipw.Output()
 
         # Apps per page.
@@ -62,13 +58,11 @@ class AiidaLabAppStore(ipw.HBox):
         apply_category_filter.on_click(self.change_vis_list)
         clear_category_filter = ipw.Button(description='clear selection')
         clear_category_filter.on_click(self._clear_category_filter)
-        self.category_title_key_mapping = {
-            categories_dict[key]['title'] if key in categories_dict else key: key for key in categories_dict
-        }
+        self.category_title_key_mapping = {self.index["categories"][key].get('title', key): key for key in self.index["categories"]}
         self.category_filter.options = list(self.category_title_key_mapping)
 
         # Define the apps that are going to be displayed.
-        self.apps_to_display = [AiidaLabApp(name, app, AIIDALAB_APPS) for name, app in self.registry_sorted_list]
+        self.apps_to_display = [AiidaLabApp(app_id, None, None) for app_id in self.index["apps"]]
 
         self.update_page_selector()
         super().__init__([
@@ -95,7 +89,7 @@ class AiidaLabAppStore(ipw.HBox):
     def change_vis_list(self, _=None):
         """This function creates a list of apps to be displayed. Moreover, it creates a parallel list of categories.
         After this the page selector update is called."""
-        self.apps_to_display = [AiidaLabApp(name, app, AIIDALAB_APPS) for name, app in self.registry_sorted_list]
+        self.apps_to_display = [AiidaLabApp.from_id(app_id) for app_id in self.index["apps"]]
 
         if self.only_installed.value:
             self.apps_to_display = [app for app in self.apps_to_display if app.is_installed()]
