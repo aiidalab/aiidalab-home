@@ -162,19 +162,7 @@ class AppManagerWidget(ipw.VBox):
         if not version:  # will be displayed during transition phases
             return '[n/a]'
 
-        if version.startswith('git:refs/remotes/'):  # remote branch
-            return re.sub('git:refs\/remotes\/(.+?)\/', '', version) + ' (latest)'
-
-        if version.startswith('git:refs/heads/'):  # branch
-            return f"{version[len('git:refs/heads/'):]} (latest)"
-
-        if version.startswith('git:refs/tags/'):  # tag
-            return version[len('git:refs/tags/'):]
-
-        if version.startswith('git:'):  # commit
-            return version[4:4 + 8]
-
-        raise ValueError("Unknown version format: '{}'".format(version))
+        return version
 
     def _refresh_widget_state(self, _=None):
         """Refresh the widget to reflect the current state of the app."""
