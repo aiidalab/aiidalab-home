@@ -64,11 +64,25 @@ class AppManagerWidget(ipw.VBox):
     versions if possible.
     """
 
-    COMPATIBILTIY_WARNING = Template("""<p style="background-color:#FFCC00; text-align:center;">
-    <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
+    COMPATIBILTIY_WARNING = Template("""<div class="alert alert-danger">
     The installed version of this app is not compatible with this AiiDAlab environment.
-    <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
-    </p>""")
+    </div>""")
+
+    COMPATIBILITY_INFO = Template("""<div class="alert alert-warning alert-dismissible">
+        <a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>
+            Reasons for incompatibility:
+            <ul>
+            {% for spec in app.compatibility_info %}
+                <li>{{ spec }}:
+                    <ul>
+                        {% for missing_req in app.compatibility_info[spec] %}
+                        <li>missing: {{ missing_req }}</li>
+                        {% endfor %}
+                    </ul>
+                </li>
+            {% endfor %}
+            </ul>
+        </div>""")
 
     TEMPLATE = Template("""<b> <div style="font-size: 30px; text-align:center;">{{ app.title }}</div></b>
     <br>
@@ -107,6 +121,8 @@ class AppManagerWidget(ipw.VBox):
         self.blocked_ignore = ipw.Checkbox(description="Ignore")
         self.blocked_ignore.observe(self._refresh_widget_state)
 
+        self.compatibility_info = ipw.HTML()
+
         self.spinner = Spinner("color:#337ab7;font-size:1em;")
         ipw.dlink((self.app, 'busy'), (self.spinner, 'enabled'))
 
@@ -116,6 +132,7 @@ class AppManagerWidget(ipw.VBox):
             ipw.HBox([self.uninstall_button, self.install_button, self.update_button, self.spinner]),
             ipw.HBox([self.install_info]),
             ipw.HBox([self.issue_indicator, self.blocked_ignore]),
+            ipw.HBox([self.compatibility_info]),
         ]
 
         self.version_selector = VersionSelectorWidget()
@@ -145,19 +162,7 @@ class AppManagerWidget(ipw.VBox):
         if not version:  # will be displayed during transition phases
             return '[n/a]'
 
-        if version.startswith('git:refs/remotes/'):  # remote branch
-            return re.sub('git:refs\/remotes\/(.+?)\/', '', version) + ' (latest)'
-
-        if version.startswith('git:refs/heads/'):  # branch
-            return f"{version[len('git:refs/heads/'):]} (latest)"
-
-        if version.startswith('git:refs/tags/'):  # tag
-            return version[len('git:refs/tags/'):]
-
-        if version.startswith('git:'):  # commit
-            return version[4:4 + 8]
-
-        raise ValueError("Unknown version format: '{}'".format(version))
+        return version
 
     def _refresh_widget_state(self, _=None):
         """Refresh the widget to reflect the current state of the app."""
@@ -242,6 +247,11 @@ class AppManagerWidget(ipw.VBox):
             else:
                 self.issue_indicator.value = ''
             self.blocked_ignore.layout.visibility = 'visible' if (detached or not compatible) else 'hidden'
+
+            if any(self.app.compatibility_info.values()) and self.app.compatible is False:
+                self.compatibility_info.value = self.COMPATIBILITY_INFO.render(app=self.app)
+            else:
+                self.compatibility_info.value = ""
 
     def _show_msg_success(self, msg):
         """Show a message indicating successful execution of a requested operation."""
