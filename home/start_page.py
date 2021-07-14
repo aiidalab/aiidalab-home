@@ -159,7 +159,7 @@ class AppWidget(ipw.VBox):
             header_items.append(app_status_info)
 
             footer_items.append(
-                "<a href=./single_app.ipynb?app={app.name}><button>Manage App</button></a>"
+                f"<a href=./single_app.ipynb?app={app.name}><button>Manage App</button></a>"
             )
             if app.metadata.get("external_url"):
                 footer_items.append(
