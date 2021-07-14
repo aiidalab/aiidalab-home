@@ -1,16 +1,14 @@
 """Module to generate AiiDAlab home page."""
-from os import path
-from glob import glob
-from functools import wraps
-
 import json
-import traitlets
-import ipywidgets as ipw
-from IPython.display import display
+from functools import wraps
+from glob import glob
+from os import path
 
-# AiiDAlab imports.
+import ipywidgets as ipw
+import traitlets
 from aiidalab.app import AiidaLabApp
 from aiidalab.config import AIIDALAB_APPS
+from IPython.display import display
 
 from home.utils import load_widget
 from home.widgets import AppStatusInfoWidget
@@ -19,11 +17,13 @@ from home.widgets import AppStatusInfoWidget
 def create_app_widget_move_buttons(name):
     """Make buttons to move the app widget up or down."""
     layout = ipw.Layout(width="40px")
-    app_widget_move_buttons = ipw.HTML("""
+    app_widget_move_buttons = ipw.HTML(
+        f"""
     <a href=./start.ipynb?move_up={name} title="Move it up"><i class='fa fa-arrow-up' style='color:#337ab7;font-size:2em;' ></i></a>
     <a href=./start.ipynb?move_down={name} title="Move it down"><i class='fa fa-arrow-down' style='color:#337ab7;font-size:2em;' ></i></a>
-    """.format(name=name),
-                                       layout=layout)
+    """,
+        layout=layout,
+    )
     app_widget_move_buttons.layout.margin = "50px 0px 0px 0px"
 
     return app_widget_move_buttons
@@ -41,12 +41,12 @@ def _workaround_property_lock_issue(func):
 
     @wraps(func)
     def _inner(self, change):
-        if change['name'] == '_property_lock':
-            if 'selected_index' in change['old']:
+        if change["name"] == "_property_lock":
+            if "selected_index" in change["old"]:
                 fixed_change = change.copy()
-                fixed_change['name'] = 'selected_index'
-                fixed_change['new'] = change['old']['selected_index']
-                del fixed_change['old']
+                fixed_change["name"] = "selected_index"
+                fixed_change["new"] = change["old"]["selected_index"]
+                del fixed_change["old"]
                 return func(self, fixed_change)
 
         return func(self, change)
@@ -67,33 +67,33 @@ class AiidaLabHome:
         config = self.read_config()
         app = AiidaLabApp(name, None, AIIDALAB_APPS)
 
-        if name == 'home':
+        if name == "home":
             app_widget = AppWidget(app, allow_move=False, allow_manage=False)
         else:
             app_widget = CollapsableAppWidget(app, allow_move=True)
-            app_widget.hidden = name in config['hidden']
-            app_widget.observe(self._on_app_widget_change_hidden, names=['hidden'])
+            app_widget.hidden = name in config["hidden"]
+            app_widget.observe(self._on_app_widget_change_hidden, names=["hidden"])
 
         return app_widget
 
     def _on_app_widget_change_hidden(self, change):
         """Record whether a app widget is hidden on the home screen in the config file."""
         config = self.read_config()
-        hidden = set(config['hidden'])
-        if change['new']:  # hidden
-            hidden.add(change['owner'].app.name)
+        hidden = set(config["hidden"])
+        if change["new"]:  # hidden
+            hidden.add(change["owner"].app.name)
         else:  # visible
-            hidden.discard(change['owner'].app.name)
-        config['hidden'] = list(hidden)
+            hidden.discard(change["owner"].app.name)
+        config["hidden"] = list(hidden)
         self.write_config(config)
 
     def write_config(self, config):
-        json.dump(config, open(self.config_fn, 'w'), indent=2)
+        json.dump(config, open(self.config_fn, "w"), indent=2)
 
     def read_config(self):
         if path.exists(self.config_fn):
-            return json.load(open(self.config_fn, 'r'))
-        return {'order': [], 'hidden': []}  #default config
+            return json.load(open(self.config_fn, "r"))
+        return {"order": [], "hidden": []}  # default config
 
     def render(self):
         """Rendering all apps."""
@@ -115,25 +115,27 @@ class AiidaLabHome:
         """Load apps according to the order defined in the config file."""
         apps = [
             path.basename(fn)
-            for fn in glob(path.join(AIIDALAB_APPS, '*'))
-            if path.isdir(fn) and not fn.endswith('home') and not fn.endswith('__pycache__')
+            for fn in glob(path.join(AIIDALAB_APPS, "*"))
+            if path.isdir(fn)
+            and not fn.endswith("home")
+            and not fn.endswith("__pycache__")
         ]
         config = self.read_config()
-        order = config['order']
+        order = config["order"]
         apps.sort(key=lambda x: order.index(x) if x in order else -1)
-        config['order'] = apps
+        config["order"] = apps
         self.write_config(config)
-        return ['home'] + apps
+        return ["home"] + apps
 
     def move_updown(self, name, delta):
         """Move the app up/down on the start page."""
         config = self.read_config()
-        order = config['order']
+        order = config["order"]
         i = order.index(name)
         del order[i]
         j = min(len(order), max(0, i + delta))
         order.insert(j, name)
-        config['order'] = order
+        config["order"] = order
         self.write_config(config)
 
 
@@ -151,14 +153,18 @@ class AppWidget(ipw.VBox):
 
         if allow_manage:
             app_status_info = AppStatusInfoWidget()
-            for trait in ('detached', 'compatible', 'updates_available'):
+            for trait in ("detached", "compatible", "updates_available"):
                 ipw.dlink((app, trait), (app_status_info, trait))
             app_status_info.layout.margin = "0px 0px 0px 800px"
             header_items.append(app_status_info)
 
-            footer_items.append("<a href=./single_app.ipynb?app={}><button>Manage App</button></a>".format(app.name))
+            footer_items.append(
+                "<a href=./single_app.ipynb?app={app.name}><button>Manage App</button></a>"
+            )
             if app.metadata.get("external_url"):
-                footer_items.append('<a href="{}"><button>URL</button></a>'.format(app.metadata["external_url"]))
+                footer_items.append(
+                    f"""<a href="{app.metadata['external_url']}"><button>URL</button></a>"""
+                )
 
         if allow_move:
             app_widget_move_buttons = create_app_widget_move_buttons(app.name)
@@ -166,12 +172,13 @@ class AppWidget(ipw.VBox):
         else:
             body = launcher
 
-
         header = ipw.HBox(header_items)
         header.layout.margin = None if allow_manage else "20px 0px 0px 0px"
 
-        footer = ipw.HTML(' '.join(footer_items), layout={'width': 'initial'})
-        footer.layout.margin = "0px 0px 0px 700px" if allow_manage else "0px 0px 20px 0px"
+        footer = ipw.HTML(" ".join(footer_items), layout={"width": "initial"})
+        footer.layout.margin = (
+            "0px 0px 0px 700px" if allow_manage else "0px 0px 20px 0px"
+        )
 
         super().__init__(children=[header, body, footer])
 
@@ -187,13 +194,17 @@ class CollapsableAppWidget(ipw.Accordion):
         super().__init__(children=[app_widget])
         self.set_title(0, app.title)
         # Need to observe all names here due to unidentified issue:
-        self.observe(self._observe_accordion_selected_index)  # , names=['selected_index'])
+        self.observe(
+            self._observe_accordion_selected_index
+        )  # , names=['selected_index'])
 
     @_workaround_property_lock_issue
     def _observe_accordion_selected_index(self, change):
-        if change['name'] == 'selected_index':  # Observing all names due to unidentified issue.
-            self.hidden = change['new'] is None
+        if (
+            change["name"] == "selected_index"
+        ):  # Observing all names due to unidentified issue.
+            self.hidden = change["new"] is None
 
-    @traitlets.observe('hidden')
+    @traitlets.observe("hidden")
     def _observe_hidden(self, change):
-        self.selected_index = None if change['new'] else 0
+        self.selected_index = None if change["new"] else 0
