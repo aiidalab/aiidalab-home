@@ -1,7 +1,8 @@
 import ipywidgets as ipw
 
+
 def get_start_widget(appbase, jupbase):
-    #http://fontawesome.io/icons/
+    # http://fontawesome.io/icons/
     template = """
     <center>
     <table>
@@ -53,8 +54,6 @@ def get_start_widget(appbase, jupbase):
     </table>
     </center>
 """
-    
+
     html = template.format(appbase=appbase, jupbase=jupbase, style="margin:20px")
     return ipw.HTML(html)
-    
-#EOF
