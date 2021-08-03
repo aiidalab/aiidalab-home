@@ -10,7 +10,7 @@ from jinja2 import Template
 from packaging.version import parse
 
 from home.utils import load_logo
-from home.widgets import Spinner, StatusHTML
+from home.widgets import LogOutputWidget, Spinner, StatusHTML
 
 HTML_MSG_PROGRESS = """{}"""
 
@@ -116,6 +116,12 @@ class AppManagerWidget(ipw.VBox):
             message="<p><br></p>"
         )  # show empty line by default
 
+        self.dependencies_log = LogOutputWidget(
+            num_min_lines=0, layout=ipw.Layout(min_height="0px", max_height="100px")
+        )
+        self.app.set_stdout(self.dependencies_log)
+        self.app.set_stderr(self.dependencies_log)
+
         # Setup buttons
         self.install_button = ipw.Button(description="Install", disabled=True)
         self.install_button.on_click(self._install_version)
@@ -147,6 +153,7 @@ class AppManagerWidget(ipw.VBox):
                 ]
             ),
             ipw.HBox([self.install_info]),
+            ipw.HBox([self.dependencies_log]),
             ipw.HBox([self.issue_indicator, self.blocked_ignore]),
             ipw.HBox([self.compatibility_info]),
         ]
