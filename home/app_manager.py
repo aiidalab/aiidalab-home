@@ -120,7 +120,6 @@ class AppManagerWidget(ipw.VBox):
             num_min_lines=0, layout=ipw.Layout(min_height="0px", max_height="100px")
         )
         self.app.set_stdout(self.dependencies_log)
-        self.app.set_stderr(self.dependencies_log)
 
         # Setup buttons
         self.install_button = ipw.Button(description="Install", disabled=True)
