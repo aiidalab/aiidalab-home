@@ -119,7 +119,6 @@ class AppManagerWidget(ipw.VBox):
         self.dependencies_log = LogOutputWidget(
             num_min_lines=0, layout=ipw.Layout(min_height="0px", max_height="100px")
         )
-        self.app.set_stdout(self.dependencies_log)
 
         # Setup buttons
         self.install_button = ipw.Button(description="Install", disabled=True)
@@ -406,7 +405,9 @@ class AppManagerWidget(ipw.VBox):
         version = self.version_selector.version_to_install.value  # can be None
         try:
             self._check_detached_state()
-            version = self.app.install_app(version=version)  # argument may be None
+            version = self.app.install_app(
+                version=version, stdout=self.dependencies_log
+            )  # argument may be None
         except (AssertionError, RuntimeError, CalledProcessError) as error:
             self._show_msg_failure(str(error))
         else:
