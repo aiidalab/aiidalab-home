@@ -5,10 +5,10 @@ from subprocess import CalledProcessError
 
 import ipywidgets as ipw
 import traitlets
-from aiidalab.app import AppVersion
 from jinja2 import Template
 from packaging.version import parse
 
+from aiidalab.app import AppVersion
 from home.utils import load_logo
 from home.widgets import LogOutputWidget, Spinner, StatusHTML
 
@@ -118,6 +118,9 @@ class AppManagerWidget(ipw.VBox):
 
         self.dependencies_log = LogOutputWidget(
             num_min_lines=0, layout=ipw.Layout(min_height="0px", max_height="100px")
+        )
+        self.dependencies_log.template = (
+            "Installing dependencies..." + self.dependencies_log.template
         )
 
         # Setup buttons
@@ -419,7 +422,7 @@ class AppManagerWidget(ipw.VBox):
         """Attempt to update the app."""
         try:
             self._check_detached_state()
-            self.app.update_app()
+            self.app.update_app(stdout=self.dependencies_log)
         except (AssertionError, RuntimeError, CalledProcessError) as error:
             self._show_msg_failure(str(error))
         else:

@@ -168,6 +168,7 @@ class Spinner(ipw.HTML):
 class LogOutputWidget(ipw.VBox):
 
     value = traitlets.Unicode()
+    template = traitlets.Unicode()
 
     def __init__(self, num_min_lines=10, **kwargs):
         self._num_min_lines = num_min_lines
@@ -189,6 +190,10 @@ class LogOutputWidget(ipw.VBox):
             return "\n" * self._num_min_lines
         return ""
 
+    @traitlets.default("template")
+    def _default_tempalte(self):
+        return """<pre style="background-color: #1f1f2e; color: white; line-height: 100%">{text}</pre>"""
+
     @traitlets.observe("value")
     def _refresh_output(self, _=None):
         with self.hold_trait_notifications():
@@ -208,8 +213,4 @@ class LogOutputWidget(ipw.VBox):
             lines[0] = "[waiting for output]"
 
         text = "\n".join(lines)
-        return (
-            f"""Intalling dependencies... </br> <pre style="background-color: #1f1f2e; color: white; line-height: 100%">{text}</pre>"""
-            if text
-            else ""
-        )
+        return self.template.format(text=text) if text else ""
