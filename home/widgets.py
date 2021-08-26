@@ -171,7 +171,6 @@ class LogOutputWidget(ipw.VBox):
     template = traitlets.Unicode()
 
     def __init__(self, num_min_lines=10, **kwargs):
-        self._num_min_lines = num_min_lines
         self._output = ipw.HTML(layout=ipw.Layout(min_width="60em"))
         self._refresh_output()
         super().__init__(
@@ -186,31 +185,15 @@ class LogOutputWidget(ipw.VBox):
 
     @traitlets.default("value")
     def _default_value(self):
-        if self._num_min_lines > 0:
-            return "\n" * self._num_min_lines
         return ""
 
     @traitlets.default("template")
-    def _default_tempalte(self):
+    def _default_template(self):
         return """<pre style="background-color: #1f1f2e; color: white; line-height: 100%">{text}</pre>"""
 
     @traitlets.observe("value")
     def _refresh_output(self, _=None):
         with self.hold_trait_notifications():
-            self._output.value = self._format_output(self.value)
-
-    def _format_output(self, text):
-        lines = text.splitlines()
-
-        # Add empty lines to reach the minimum number of lines.
-        lines += [""] * max(0, self._num_min_lines - len(lines))
-
-        # Replace empty lines with single white space to ensure that they are actually shown.
-        lines = [line if len(line) > 0 else " " for line in lines]
-
-        # Replace the first line if there is no output whatsoever
-        if len(text.strip()) == 0 and len(lines) > 0:
-            lines[0] = "[waiting for output]"
-
-        text = "\n".join(lines)
-        return self.template.format(text=text) if text else ""
+            self._output.value = (
+                self.template.format(text=self.value) if self.value else ""
+            )
