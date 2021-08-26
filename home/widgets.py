@@ -170,7 +170,7 @@ class LogOutputWidget(ipw.VBox):
     value = traitlets.Unicode()
     template = traitlets.Unicode()
 
-    def __init__(self, num_min_lines=10, **kwargs):
+    def __init__(self, **kwargs):
         self._output = ipw.HTML(layout=ipw.Layout(min_width="60em"))
         self._refresh_output()
         super().__init__(
