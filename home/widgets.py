@@ -163,3 +163,37 @@ class Spinner(ipw.HTML):
             )
         else:
             self.value = ""
+
+
+class LogOutputWidget(ipw.VBox):
+
+    value = traitlets.Unicode()
+    template = traitlets.Unicode()
+
+    def __init__(self, **kwargs):
+        self._output = ipw.HTML(layout=ipw.Layout(min_width="60em"))
+        self._refresh_output()
+        super().__init__(
+            children=[
+                self._output,
+            ],
+            **kwargs,
+        )
+
+    def write(self, text):
+        self.value += text
+
+    @traitlets.default("value")
+    def _default_value(self):
+        return ""
+
+    @traitlets.default("template")
+    def _default_template(self):
+        return """<pre style="background-color: #1f1f2e; color: white; line-height: 100%">{text}</pre>"""
+
+    @traitlets.observe("value")
+    def _refresh_output(self, _=None):
+        with self.hold_trait_notifications():
+            self._output.value = (
+                self.template.format(text=self.value) if self.value else ""
+            )

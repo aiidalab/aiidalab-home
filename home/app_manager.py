@@ -10,7 +10,7 @@ from jinja2 import Template
 from packaging.version import parse
 
 from home.utils import load_logo
-from home.widgets import Spinner, StatusHTML
+from home.widgets import LogOutputWidget, Spinner, StatusHTML
 
 HTML_MSG_PROGRESS = """{}"""
 
@@ -116,6 +116,13 @@ class AppManagerWidget(ipw.VBox):
             message="<p><br></p>"
         )  # show empty line by default
 
+        self.dependencies_log = LogOutputWidget(
+            layout=ipw.Layout(min_height="0px", max_height="100px")
+        )  # max_height controls the maximum height of the log field.
+        self.dependencies_log.template = (
+            "Installing dependencies..." + self.dependencies_log.template
+        )
+
         # Setup buttons
         self.install_button = ipw.Button(description="Install", disabled=True)
         self.install_button.on_click(self._install_version)
@@ -147,6 +154,7 @@ class AppManagerWidget(ipw.VBox):
                 ]
             ),
             ipw.HBox([self.install_info]),
+            ipw.HBox([self.dependencies_log]),
             ipw.HBox([self.issue_indicator, self.blocked_ignore]),
             ipw.HBox([self.compatibility_info]),
         ]
@@ -400,7 +408,9 @@ class AppManagerWidget(ipw.VBox):
         version = self.version_selector.version_to_install.value  # can be None
         try:
             self._check_detached_state()
-            version = self.app.install_app(version=version)  # argument may be None
+            version = self.app.install_app(
+                version=version, stdout=self.dependencies_log
+            )  # argument may be None
         except (AssertionError, RuntimeError, CalledProcessError) as error:
             self._show_msg_failure(str(error))
         else:
@@ -412,7 +422,7 @@ class AppManagerWidget(ipw.VBox):
         """Attempt to update the app."""
         try:
             self._check_detached_state()
-            self.app.update_app()
+            self.app.update_app(stdout=self.dependencies_log)
         except (AssertionError, RuntimeError, CalledProcessError) as error:
             self._show_msg_failure(str(error))
         else:
