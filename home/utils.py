@@ -53,35 +53,10 @@ def load_start_md(name):
 
 
 def load_logo(app):
-    """Return logo object. Give the priority to the local version"""
+    """Return HTML widget containing the logo."""
 
-    # For some reason standard ipw.Image() app does not work properly.
     res = ipw.HTML(
-        '<img src="./aiidalab_logo_v4.svg">',
+        f'<img src="{app.logo}">',
         layout={"width": "100px", "height": "100px"},
     )
-
-    # Checking whether the 'logo' key is present in metadata dictionary.
-    if "logo" not in app.metadata:
-        res.value = '<img src="./aiidalab_logo_v4.svg">'
-
-    # If 'logo' key is present and the app is installed.
-    elif app.is_installed():
-        res.value = '<img src="{}">'.format(
-            path.join("..", app.name, app.metadata["logo"])
-        )
-
-    # If not installed, getting file from the remote git repository.
-    else:
-        # Remove .git if present.
-        html_link = path.splitext(app.url)[0]
-
-        # We expect it to always be a git repository
-        html_link += "/master/" + app.metadata["logo"]
-        if "github.com" in html_link:
-            html_link = html_link.replace("github.com", "raw.githubusercontent.com")
-            if html_link.endswith(".svg"):
-                html_link += "?sanitize=true"
-        res.value = '<img src="{}">'.format(html_link)
-
     return res
