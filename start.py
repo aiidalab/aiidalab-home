@@ -45,7 +45,7 @@ def get_start_widget(appbase, jupbase):
     <td style="width:70px"></td>
 
     <td style="text-align:center">
-    <a style="{style}" href="https://github.com/aiidalab/aiidalab-home/wiki/Intro" title="Learn about AiiDAlab" target="_blank">
+    <a style="{style}" href="https://aiidalab.readthedocs.io" title="Learn about AiiDAlab" target="_blank">
     <i class="fa fa-question fa-3x" aria-hidden="true"></i>
     </a><br>
     Help
