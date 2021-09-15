@@ -105,11 +105,6 @@ class AppStatusInfoWidget(ipw.HTML):
         "and avoid compatibility isssues."
     )
 
-    MESSAGE_APP_VERSION_INCOMPATIBLE = (
-        f'<div title="{TOOLTIP_APP_VERSION_INCOMPATIBLE}"><font color="{Theme.COLORS.WARNING}">'
-        f"{Theme.ICONS.APP_VERSION_INCOMPATIBLE} Update required</font></div>"
-    )
-
     MESSAGES_UPDATES = {
         None: '<div title="Encountered unknown problem while trying to determine whether '
         "updates are available for this app.>"
@@ -133,10 +128,7 @@ class AppStatusInfoWidget(ipw.HTML):
         if self.detached is True:
             self.value = self.MESSAGE_DETACHED
         elif self.compatible is False:
-            if self.updates_available:
-                self.value = self.MESSAGE_APP_VERSION_INCOMPATIBLE
-            else:
-                self.value = self.MESSAGE_APP_INCOMPATIBLE
+            self.value = self.MESSAGE_APP_INCOMPATIBLE
         else:
             self.value = self.MESSAGES_UPDATES[self.updates_available]
 
