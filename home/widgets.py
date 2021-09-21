@@ -107,7 +107,7 @@ class AppStatusInfoWidget(ipw.HTML):
 
     MESSAGES_UPDATES = {
         None: '<div title="Encountered unknown problem while trying to determine whether '
-        "updates are available for this app.>"
+        'updates are available for this app.">'
         f'<font color="{Theme.COLORS.WARNING}">{Theme.ICONS.APP_UPDATE_AVAILABLE_UNKNOWN} '
         "Unable to determine availability of updates.</font></div>",
         True: '<div title="Click on &quot;Manage app&quot; to install a newer version of this app.">'
