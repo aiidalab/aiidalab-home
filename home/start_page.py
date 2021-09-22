@@ -153,7 +153,7 @@ class AppWidget(ipw.VBox):
 
         if allow_manage:
             app_status_info = AppStatusInfoWidget()
-            for trait in ("detached", "compatible", "updates_available"):
+            for trait in ("detached", "compatible", "remote_update_status"):
                 ipw.dlink((app, trait), (app_status_info, trait))
             app_status_info.layout.margin = "0px 0px 0px 800px"
             header_items.append(app_status_info)
