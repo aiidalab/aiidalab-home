@@ -5,6 +5,8 @@ from threading import Timer
 
 import ipywidgets as ipw
 import traitlets
+from aiidalab.app import AppRemoteUpdateStatus as AppStatus
+from aiidalab.config import AIIDALAB_REGISTRY
 
 from .themes import ThemeDefault as Theme
 
@@ -74,18 +76,13 @@ class AppStatusInfoWidget(ipw.HTML):
 
     detached = traitlets.Bool(allow_none=True)
     compatible = traitlets.Bool(allow_none=True)
-    updates_available = traitlets.Bool(allow_none=True)
+    remote_update_status = traitlets.UseEnum(AppStatus)
 
     MESSAGE_INIT = f"<div>{Theme.ICONS.LOADING} Loading...</div>"
 
-    TOOLTIP_DETACHED = (
+    TOOLTIP_APP_DETACHED = (
         "The app is in a detached state - likely due to local modifications - "
         "which means the ability to manage the app via the AiiDAlab interface is reduced."
-    )
-
-    MESSAGE_DETACHED = (
-        f'<div title="{TOOLTIP_DETACHED}"><font color="{Theme.COLORS.GRAY}">'
-        f"{Theme.ICONS.APP_DETACHED} Modified</font></div>"
     )
 
     TOOLTIP_APP_INCOMPATIBLE = (
@@ -93,6 +90,8 @@ class AppStatusInfoWidget(ipw.HTML):
         "You can continue using this app, but be advised that you might encounter "
         "compatibility issues."
     )
+
+    TOOLTIP_APP_NOT_REGISTERED = "This app is not registered."
 
     MESSAGE_APP_INCOMPATIBLE = (
         f'<div title="{TOOLTIP_APP_INCOMPATIBLE}"><font color="{Theme.COLORS.DANGER}">'
@@ -106,14 +105,17 @@ class AppStatusInfoWidget(ipw.HTML):
     )
 
     MESSAGES_UPDATES = {
-        None: '<div title="Encountered unknown problem while trying to determine whether '
-        "updates are available for this app.>"
-        f'<font color="{Theme.COLORS.WARNING}">{Theme.ICONS.APP_UPDATE_AVAILABLE_UNKNOWN} '
-        "Unable to determine availability of updates.</font></div>",
-        True: '<div title="Click on &quot;Manage app&quot; to install a newer version of this app.">'
+        AppStatus.CANNOT_REACH_REGISTRY: f'<div title="Unable to reach the registry server ({AIIDALAB_REGISTRY}).">'
+        f'<font color="{Theme.COLORS.GRAY}">{Theme.ICONS.APP_UPDATE_AVAILABLE_UNKNOWN} '
+        "Cannot reach server.</font></div>",
+        AppStatus.UPDATE_AVAILABLE: '<div title="Click on &quot;Manage app&quot; to install a newer version of this app.">'
         f'<font color="{Theme.COLORS.NOTIFY}">{Theme.ICONS.APP_UPDATE_AVAILABLE} Update available</font></div>',
-        False: '<div title="The currently installed version of this app is the latest available version.">'
+        AppStatus.UP_TO_DATE: '<div title="The currently installed version of this app is the latest available version.">'
         f'<font color="{Theme.COLORS.CHECK}">{Theme.ICONS.APP_NO_UPDATE_AVAILABLE} Latest version</font></div>',
+        AppStatus.DETACHED: f'<div title="{TOOLTIP_APP_DETACHED}"><font color="{Theme.COLORS.GRAY}">'
+        f"{Theme.ICONS.APP_DETACHED} Modified</font></div>",
+        AppStatus.NOT_REGISTERED: f'<div title="{TOOLTIP_APP_NOT_REGISTERED}"><font color="{Theme.COLORS.GRAY}">'
+        f"{Theme.ICONS.APP_NOT_REGISTERED} Not registered</font></div>",
     }
 
     def __init__(self, value=None, **kwargs):
@@ -121,16 +123,14 @@ class AppStatusInfoWidget(ipw.HTML):
             value = self.MESSAGE_INIT
         super().__init__(value=value, **kwargs)
         self.observe(
-            self._refresh, names=["detached", "compatible", "updates_available"]
+            self._refresh, names=["detached", "compatible", "remote_update_status"]
         )
 
     def _refresh(self, _=None):
-        if self.detached is True:
-            self.value = self.MESSAGE_DETACHED
-        elif self.compatible is False:
+        if self.compatible is False:
             self.value = self.MESSAGE_APP_INCOMPATIBLE
         else:
-            self.value = self.MESSAGES_UPDATES[self.updates_available]
+            self.value = self.MESSAGES_UPDATES[self.remote_update_status]
 
 
 class Spinner(ipw.HTML):
