@@ -5,6 +5,7 @@ from subprocess import CalledProcessError
 
 import ipywidgets as ipw
 import traitlets
+from aiidalab.app import AppRemoteUpdateStatus as AppStatus
 from aiidalab.app import AppVersion
 from jinja2 import Template
 from packaging.version import parse
@@ -240,6 +241,10 @@ class AppManagerWidget(ipw.VBox):
             installed = self.app.is_installed()
             installed_version = self.app.installed_version
             compatible = len(self.app.available_versions) > 0
+            registered = self.app.remote_update_status is not AppStatus.NOT_REGISTERED
+            cannot_reach_registry = (
+                self.app.remote_update_status is AppStatus.CANNOT_REACH_REGISTRY
+            )
             busy = self.app.busy
             detached = self.app.detached
             available_versions = self.app.available_versions
@@ -248,7 +253,9 @@ class AppManagerWidget(ipw.VBox):
             blocked_install = (
                 detached or not compatible
             ) and not self.blocked_ignore.value
-            blocked_uninstall = detached and not self.blocked_ignore.value
+            blocked_uninstall = (
+                detached or not registered or cannot_reach_registry
+            ) and not self.blocked_ignore.value
 
             # Check app compatibility and show banner if not compatible.
             self.compatibility_warning.layout.visibility = (
@@ -261,11 +268,9 @@ class AppManagerWidget(ipw.VBox):
             # These messages and icons are only shown if needed.
             warn_or_ban_icon = "warning" if override else "ban"
             if override:
-                tooltip_danger = (
-                    "Operation will lead to potential loss of local modifications!"
-                )
+                tooltip_danger = "Operation will lead to potential loss of local data!"
             else:
-                tooltip_danger = "Operation blocked due to local modifications."
+                tooltip_danger = "Operation blocked due to potential data loss."
             tooltip_incompatible = "The app is not supported for this environment."
 
             # Determine whether we can install, updated, and uninstall.
@@ -279,7 +284,10 @@ class AppManagerWidget(ipw.VBox):
             ) or not installed
             can_uninstall = installed
             try:
-                can_update = self.app.updates_available and installed
+                can_update = (
+                    self.app.remote_update_status is AppStatus.UPDATE_AVAILABLE
+                    and installed
+                )
             except RuntimeError:
                 can_update = None
 
@@ -362,10 +370,14 @@ class AppManagerWidget(ipw.VBox):
             )
 
             # Indicate whether there are local modifications and present option for user override.
-            if detached:
+            if cannot_reach_registry:
+                self.issue_indicator.value = f'<i class="fa fa-{warn_or_ban_icon}"></i> Unable to reach the registry server.'
+            elif not registered:
+                self.issue_indicator.value = f'<i class="fa fa-{warn_or_ban_icon}"></i> The app is not registered.'
+            elif detached:
                 self.issue_indicator.value = (
-                    f'<i class="fa fa-{warn_or_ban_icon}"></i> The app is modified or the installed version '
-                    "is not on the specified release line."
+                    f'<i class="fa fa-{warn_or_ban_icon}"></i> The app has local modifications or was checked out '
+                    "to an unknown version."
                 )
             elif not compatible:
                 self.issue_indicator.value = f'<i class="fa fa-{warn_or_ban_icon}"></i> The app is not supported for this environment.'

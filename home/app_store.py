@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """AiiDAlab app store."""
+import logging
 
 import ipywidgets as ipw
 from aiidalab.app import AiidaLabApp
@@ -9,13 +10,18 @@ from jinja2 import Template
 
 from home.app_manager import AppManagerWidget
 
+logger = logging.getLogger(__name__)
+
 
 class AiidaLabAppStore(ipw.HBox):
     """Class to manage AiiDAlab app store."""
 
     def __init__(self):
-        # TODO: Improve fallback implementation!
-        self.index = load_app_registry_index() or dict(apps=[], categories=[])
+        try:
+            self.index = load_app_registry_index()
+        except RuntimeError as error:
+            logger.warning(error)
+            self.index = dict(apps=[], categories=[])
         self.output = ipw.Output()
 
         # Apps per page.
