@@ -19,7 +19,9 @@ def load_start_py(name):
     """Load app appearance from a Python file."""
     try:
         # Loading start.py from the app's folder
-        spec = util.spec_from_file_location("start", path.join(AIIDALAB_APPS, name, "start.py"))
+        spec = util.spec_from_file_location(
+            "start", path.join(AIIDALAB_APPS, name, "start.py")
+        )
         mod = util.module_from_spec(spec)
         spec.loader.exec_module(mod)
 
