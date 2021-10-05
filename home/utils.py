@@ -1,7 +1,7 @@
 """Helpful utilities for the AiiDAlab tools."""
 
 import sys
-from importlib import import_module
+from importlib import util
 from os import path
 
 import ipywidgets as ipw
@@ -18,7 +18,11 @@ def load_widget(name):
 def load_start_py(name):
     """Load app appearance from a Python file."""
     try:
-        mod = import_module("apps.%s.start" % name)
+        # Loading start.py from the app's folder
+        spec = util.spec_from_file_location("start", path.join(AIIDALAB_APPS, name, "start.py"))
+        mod = util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
         appbase = "../" + name
         jupbase = "../../.."
         notebase = jupbase + "/notebooks/apps/" + name
