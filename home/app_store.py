@@ -110,7 +110,7 @@ class AiidaLabAppStore(ipw.HBox):
         """This function creates a list of apps to be displayed. Moreover, it creates a parallel list of categories.
         After this the page selector update is called."""
         self.apps_to_display = [
-            AiidaLabApp.from_id(app_id) for app_id in self.index["apps"]
+            AiidaLabApp(app_id, None, None) for app_id in self.index["apps"]
         ]
 
         if self.only_installed.value:
