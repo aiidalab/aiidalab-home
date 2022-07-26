@@ -378,6 +378,8 @@ class AppManagerWidget(ipw.VBox):
                 self.issue_indicator.value = f'<i class="fa fa-{warn_or_ban_icon}"></i> Unable to reach the registry server.'
             elif not registered:
                 self.issue_indicator.value = f'<i class="fa fa-{warn_or_ban_icon}"></i> The app is not registered.'
+            elif busy:
+                self.issue_indicator.value = ""
             elif detached:
                 self.issue_indicator.value = (
                     f'<i class="fa fa-{warn_or_ban_icon}"></i> The app has local modifications or was checked out '
