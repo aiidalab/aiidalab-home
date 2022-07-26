@@ -260,7 +260,7 @@ class AppManagerWidget(ipw.VBox):
             # Check app compatibility and show banner if not compatible.
             self.compatibility_warning.layout.visibility = (
                 "visible"
-                if (self.app.is_installed() and self.app.compatible is False)
+                if (not busy and self.app.is_installed() and self.app.compatible is False)
                 else "hidden"
             )
 
@@ -388,6 +388,7 @@ class AppManagerWidget(ipw.VBox):
             )
 
             if (
+                not busy and
                 any(self.app.compatibility_info.values())
                 and self.app.compatible is False
             ):
