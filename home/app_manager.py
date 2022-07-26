@@ -430,6 +430,7 @@ class AppManagerWidget(ipw.VBox):
             self._show_msg_success(
                 f"Installed app ({self._formatted_version(version)})."
             )
+            self.dependencies_log.value = ""
 
     def _update_app(self, _):
         """Attempt to update the app."""
@@ -440,6 +441,7 @@ class AppManagerWidget(ipw.VBox):
             self._show_msg_failure(str(error))
         else:
             self._show_msg_success("Updated app.")
+            self.dependencies_log.value = ""
 
     def _uninstall_app(self, _):
         """Attempt to uninstall the app."""
