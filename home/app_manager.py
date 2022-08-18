@@ -260,7 +260,11 @@ class AppManagerWidget(ipw.VBox):
             # Check app compatibility and show banner if not compatible.
             self.compatibility_warning.layout.visibility = (
                 "visible"
-                if (self.app.is_installed() and self.app.compatible is False)
+                if (
+                    not busy
+                    and self.app.is_installed()
+                    and self.app.compatible is False
+                )
                 else "hidden"
             )
 
@@ -374,6 +378,8 @@ class AppManagerWidget(ipw.VBox):
                 self.issue_indicator.value = f'<i class="fa fa-{warn_or_ban_icon}"></i> Unable to reach the registry server.'
             elif not registered:
                 self.issue_indicator.value = f'<i class="fa fa-{warn_or_ban_icon}"></i> The app is not registered.'
+            elif busy:
+                self.issue_indicator.value = ""
             elif detached:
                 self.issue_indicator.value = (
                     f'<i class="fa fa-{warn_or_ban_icon}"></i> The app has local modifications or was checked out '
@@ -388,7 +394,8 @@ class AppManagerWidget(ipw.VBox):
             )
 
             if (
-                any(self.app.compatibility_info.values())
+                not busy
+                and any(self.app.compatibility_info.values())
                 and self.app.compatible is False
             ):
                 self.compatibility_info.value = self.COMPATIBILITY_INFO.render(
@@ -429,6 +436,7 @@ class AppManagerWidget(ipw.VBox):
             self._show_msg_success(
                 f"Installed app ({self._formatted_version(version)})."
             )
+            self.dependencies_log.value = ""
 
     def _update_app(self, _):
         """Attempt to update the app."""
@@ -439,6 +447,7 @@ class AppManagerWidget(ipw.VBox):
             self._show_msg_failure(str(error))
         else:
             self._show_msg_success("Updated app.")
+            self.dependencies_log.value = ""
 
     def _uninstall_app(self, _):
         """Attempt to uninstall the app."""
