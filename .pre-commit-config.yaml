@@ -16,13 +16,13 @@ repos:
           - id: yamlfmt
 
     - repo: https://github.com/psf/black
-      rev: 22.6.0
+      rev: 22.10.0
       hooks:
           - id: black
             language_version: python3 # Should be a command that runs python3.6+
 
     - repo: https://github.com/PyCQA/flake8
-      rev: 4.0.1
+      rev: 5.0.4
       hooks:
           - id: flake8
             args: [--count, --show-source, --statistics]
@@ -36,11 +36,11 @@ repos:
             args: [--profile, black, --filter-files]
 
     - repo: https://github.com/asottile/setup-cfg-fmt
-      rev: v1.20.2
+      rev: v2.2.0
       hooks:
           - id: setup-cfg-fmt
 
     - repo: https://github.com/sirosen/check-jsonschema
-      rev: 0.17.1
+      rev: 0.19.1
       hooks:
           - id: check-github-workflows
