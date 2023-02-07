@@ -260,7 +260,7 @@ class AppManagerWidget(ipw.VBox):
         ]
 
     def find_to_be_installed_dependencies(self, app_version, python_bin=None):
-        """return a list of namedtuple (app.name, app.installed_version, app.required_version)"""
+        """return a list of Dependency"""
         if python_bin is None:
             python_bin = sys.executable
 
