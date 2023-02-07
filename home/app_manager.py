@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
 """Module that contains widgets for managing AiiDAlab applications."""
 
+import sys
+from collections import namedtuple
 from subprocess import CalledProcessError
 
 import ipywidgets as ipw
 import traitlets
 from aiidalab.app import AppRemoteUpdateStatus as AppStatus
 from aiidalab.app import AppVersion
+from aiidalab.utils import find_installed_packages
 from jinja2 import Template
 from packaging.version import parse
 
@@ -20,6 +23,8 @@ HTML_MSG_SUCCESS = """<i class="fa fa-check" style="color:#337ab7;font-size:1em;
 
 HTML_MSG_FAILURE = """<i class="fa fa-times" style="color:red;font-size:1em;" ></i>
 {}"""
+
+Dependency = namedtuple("Dependency", ["installed", "requirement"])
 
 
 class VersionSelectorWidget(ipw.VBox):
@@ -90,6 +95,18 @@ class AppManagerWidget(ipw.VBox):
         </div>"""
     )
 
+    DEPENDENCIES_INSTALL_INFO = Template(
+        """<div class="alert alert-info alert-dismissible">
+        <a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>
+            Following dependencie(s) will be changed:
+            <ul>
+            {% for p in dependencies %}
+                <li> {{ p.installed }} --> {{ p.requirement }} </li>
+            {% endfor %}
+            </ul>
+        </div>"""
+    )
+
     TEMPLATE = Template(
         """<b> <div style="font-size: 30px; text-align:center;">{{ app.title }}</div></b>
     <br>
@@ -139,6 +156,7 @@ class AppManagerWidget(ipw.VBox):
         self.blocked_ignore.observe(self._refresh_widget_state)
 
         self.compatibility_info = ipw.HTML()
+        self.dependencies_install_info = ipw.HTML()
 
         self.spinner = Spinner("color:#337ab7;font-size:1em;")
         ipw.dlink((self.app, "busy"), (self.spinner, "enabled"))
@@ -158,6 +176,7 @@ class AppManagerWidget(ipw.VBox):
             ipw.HBox([self.dependencies_log]),
             ipw.HBox([self.issue_indicator, self.blocked_ignore]),
             ipw.HBox([self.compatibility_info]),
+            ipw.HBox([self.dependencies_install_info]),
         ]
 
         self.version_selector = VersionSelectorWidget()
@@ -234,17 +253,64 @@ class AppManagerWidget(ipw.VBox):
                 self.include_prereleases.value or prerelease_installed
             )
 
+    def find_unmatched_requirements(self, app_version, python_bin):
+        """Calling find_incompatibilities and get unmatched requirements"""
+        return [
+            r[1] for r in self.app._app.find_incompatibilities(app_version, python_bin)
+        ]
+
+    def find_to_be_installed_dependencies(self, app_version, python_bin=None):
+        """return a list of namedtuple (app.name, app.installed_version, app.required_version)"""
+        if python_bin is None:
+            python_bin = sys.executable
+
+        if app_version is None:
+            return []
+
+        dependencies = []
+        unmatched_requirements = self.find_unmatched_requirements(
+            app_version, python_bin
+        )
+        packages = find_installed_packages(python_bin)
+        for requriment in unmatched_requirements:
+            installed = "n/a"
+
+            for p in packages:
+                if requriment.name == p.name:
+                    installed = f"{p.name}=={p.version}"
+
+            dependencies.append(Dependency(installed, str(requriment)))
+
+        return dependencies
+
+    def _check_strict_dependencies(self, dependencies):
+        """Check dependencies that are not allowed to be override
+        return True if the strict dependencies satisfied
+
+        Note: Only check aiida-core compatibility at the moment
+        """
+        for dep in dependencies:
+            if "aiida-core" in dep.installed:
+                return False
+
+        return True
+
     def _refresh_widget_state(self, _=None):
         """Refresh the widget to reflect the current state of the app."""
         with self.hold_trait_notifications():
             # Collect information about app state.
             installed = self.app.is_installed()
             installed_version = self.app.installed_version
+            version_to_install = self.version_selector.version_to_install
+            dependencies = self.find_to_be_installed_dependencies(
+                version_to_install.value
+            )
             compatible = len(self.app.available_versions) > 0
             registered = self.app.remote_update_status is not AppStatus.NOT_REGISTERED
             cannot_reach_registry = (
                 self.app.remote_update_status is AppStatus.CANNOT_REACH_REGISTRY
             )
+            strict_dependency = self._check_strict_dependencies(dependencies)
             busy = self.app.busy
             detached = self.app.detached
             available_versions = self.app.available_versions
@@ -261,9 +327,10 @@ class AppManagerWidget(ipw.VBox):
             self.compatibility_warning.layout.visibility = (
                 "visible"
                 if (
-                    not busy
-                    and self.app.is_installed()
-                    and self.app.compatible is False
+                    not strict_dependency
+                    or (
+                        not busy and self.app.is_installed() and not self.app.compatible
+                    )
                 )
                 else "hidden"
             )
@@ -279,13 +346,14 @@ class AppManagerWidget(ipw.VBox):
 
             # Determine whether we can install, updated, and uninstall.
             can_switch = (
-                installed_version != self.version_selector.version_to_install.value
+                installed_version != version_to_install.value
                 and available_versions
+                and strict_dependency
             )
-            latest_selected = self.version_selector.version_to_install.index == 0
-            can_install = (
-                can_switch and (detached or not latest_selected)
-            ) or not installed
+            latest_selected = version_to_install.index == 0
+            can_install = (can_switch and (detached or not latest_selected)) or (
+                not installed and strict_dependency
+            )
             can_uninstall = installed
             try:
                 can_update = (
@@ -324,7 +392,7 @@ class AppManagerWidget(ipw.VBox):
             self.install_button.description = (
                 "Install"
                 if not (installed and can_install)
-                else f"Install ({self._formatted_version(self.version_selector.version_to_install.value)})"
+                else f"Install ({self._formatted_version(version_to_install.value)})"
             )
 
             # Update the uninstall button state.
@@ -366,9 +434,7 @@ class AppManagerWidget(ipw.VBox):
                 )
 
             # Update the version_selector widget state.
-            more_than_one_version = (
-                len(self.version_selector.version_to_install.options) > 1
-            )
+            more_than_one_version = len(version_to_install.options) > 1
             self.version_selector.disabled = (
                 busy or blocked_install or not more_than_one_version
             )
@@ -396,13 +462,23 @@ class AppManagerWidget(ipw.VBox):
             if (
                 not busy
                 and any(self.app.compatibility_info.values())
-                and self.app.compatible is False
+                and not self.app.compatible
             ):
                 self.compatibility_info.value = self.COMPATIBILITY_INFO.render(
                     app=self.app
                 )
             else:
                 self.compatibility_info.value = ""
+
+            # Check and show the dependencies install infos
+            if not busy and can_switch:
+                self.dependencies_install_info.value = (
+                    self.DEPENDENCIES_INSTALL_INFO.render(
+                        dependencies=dependencies,
+                    )
+                )
+            else:
+                self.dependencies_install_info.value = ""
 
     def _show_msg_success(self, msg):
         """Show a message indicating successful execution of a requested operation."""
