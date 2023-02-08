@@ -100,7 +100,7 @@ class AppManagerWidget(ipw.VBox):
         <a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>
             Following dependencie(s) will be changed:
             <ul>
-            {% for p in dependencies %}
+            {% for p in dependencies_to_install %}
                 <li> {{ p.installed }} --> {{ p.requirement }} </li>
             {% endfor %}
             </ul>
@@ -267,23 +267,23 @@ class AppManagerWidget(ipw.VBox):
         if app_version is None:
             return []
 
-        dependencies = []
+        dependencies_to_install = []
         unmatched_requirements = self.find_unmatched_requirements(
             app_version, python_bin
         )
         packages = find_installed_packages(python_bin)
-        for requriment in unmatched_requirements:
+        for requirement in unmatched_requirements:
             installed = "n/a"
 
             for p in packages:
-                if requriment.name == p.name:
+                if requirement.name == p.name:
                     installed = f"{p.name}=={p.version}"
 
-            dependencies.append(Dependency(installed, str(requriment)))
+            dependencies_to_install.append(Dependency(installed, str(requirement)))
 
-        return dependencies
+        return dependencies_to_install
 
-    def _check_strict_dependencies(self, dependencies):
+    def _validate_strict_dependency(self, dependencies):
         """Check dependencies that are not allowed to be override
         return True if the strict dependencies satisfied
 
@@ -302,7 +302,7 @@ class AppManagerWidget(ipw.VBox):
             installed = self.app.is_installed()
             installed_version = self.app.installed_version
             version_to_install = self.version_selector.version_to_install
-            dependencies = self.find_to_be_installed_dependencies(
+            dependencies_to_install = self.find_to_be_installed_dependencies(
                 version_to_install.value
             )
             compatible = len(self.app.available_versions) > 0
@@ -310,7 +310,9 @@ class AppManagerWidget(ipw.VBox):
             cannot_reach_registry = (
                 self.app.remote_update_status is AppStatus.CANNOT_REACH_REGISTRY
             )
-            strict_dependency = self._check_strict_dependencies(dependencies)
+            strict_dependency_validation = self._validate_strict_dependency(
+                dependencies_to_install
+            )
             busy = self.app.busy
             detached = self.app.detached
             available_versions = self.app.available_versions
@@ -327,7 +329,7 @@ class AppManagerWidget(ipw.VBox):
             self.compatibility_warning.layout.visibility = (
                 "visible"
                 if (
-                    not strict_dependency
+                    not strict_dependency_validation
                     or (
                         not busy and self.app.is_installed() and not self.app.compatible
                     )
@@ -348,11 +350,11 @@ class AppManagerWidget(ipw.VBox):
             can_switch = (
                 installed_version != version_to_install.value
                 and available_versions
-                and strict_dependency
+                and strict_dependency_validation
             )
             latest_selected = version_to_install.index == 0
             can_install = (can_switch and (detached or not latest_selected)) or (
-                not installed and strict_dependency
+                not installed and strict_dependency_validation
             )
             can_uninstall = installed
             try:
@@ -474,7 +476,7 @@ class AppManagerWidget(ipw.VBox):
             if not busy and can_switch:
                 self.dependencies_install_info.value = (
                     self.DEPENDENCIES_INSTALL_INFO.render(
-                        dependencies=dependencies,
+                        dependencies_to_install=dependencies_to_install,
                     )
                 )
             else:
