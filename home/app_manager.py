@@ -101,7 +101,7 @@ class AppManagerWidget(ipw.VBox):
             Following dependencie(s) will be changed:
             <ul>
             {% for p in dependencies_to_install %}
-                <li> {{ p.installed }} --> {{ p.requirement }} </li>
+                <li> {{ p.installed if p.installed is not none else '[Not Installed]' }} --> {{ p.required }} </li>
             {% endfor %}
             </ul>
         </div>"""
@@ -190,6 +190,11 @@ class AppManagerWidget(ipw.VBox):
         ipw.dlink(
             (self.app, "installed_version"),
             (self.version_selector.installed_version, "value"),
+            transform=self._formatted_version,
+        )
+        ipw.dlink(
+            (self.version_selector.version_to_install, "value"),
+            (self.app, "version_to_install"),
             transform=self._formatted_version,
         )
         self.version_selector.layout.visibility = (
@@ -301,18 +306,14 @@ class AppManagerWidget(ipw.VBox):
             # Collect information about app state.
             installed = self.app.is_installed()
             installed_version = self.app.installed_version
-            version_to_install = self.version_selector.version_to_install
-            dependencies_to_install = self.find_to_be_installed_dependencies(
-                version_to_install.value
-            )
+            version_to_install = self.app.version_to_install
+            dependencies_to_install = self.app.dependencies_to_install
             compatible = len(self.app.available_versions) > 0
             registered = self.app.remote_update_status is not AppStatus.NOT_REGISTERED
             cannot_reach_registry = (
                 self.app.remote_update_status is AppStatus.CANNOT_REACH_REGISTRY
             )
-            strict_dependency_validation = self._validate_strict_dependency(
-                dependencies_to_install
-            )
+            strict_dependencies_validation = self.app.strict_dependencies_validation
             busy = self.app.busy
             detached = self.app.detached
             available_versions = self.app.available_versions
@@ -329,7 +330,7 @@ class AppManagerWidget(ipw.VBox):
             self.compatibility_warning.layout.visibility = (
                 "visible"
                 if (
-                    not strict_dependency_validation
+                    not strict_dependencies_validation
                     or (
                         not busy and self.app.is_installed() and not self.app.compatible
                     )
@@ -348,13 +349,13 @@ class AppManagerWidget(ipw.VBox):
 
             # Determine whether we can install, updated, and uninstall.
             can_switch = (
-                installed_version != version_to_install.value
+                installed_version != version_to_install
                 and available_versions
-                and strict_dependency_validation
+                and strict_dependencies_validation
             )
-            latest_selected = version_to_install.index == 0
+            latest_selected = self.version_selector.version_to_install.index == 0
             can_install = (can_switch and (detached or not latest_selected)) or (
-                not installed and strict_dependency_validation
+                not installed and strict_dependencies_validation
             )
             can_uninstall = installed
             try:
@@ -394,7 +395,7 @@ class AppManagerWidget(ipw.VBox):
             self.install_button.description = (
                 "Install"
                 if not (installed and can_install)
-                else f"Install ({self._formatted_version(version_to_install.value)})"
+                else f"Install ({self._formatted_version(version_to_install)})"
             )
 
             # Update the uninstall button state.
@@ -436,7 +437,9 @@ class AppManagerWidget(ipw.VBox):
                 )
 
             # Update the version_selector widget state.
-            more_than_one_version = len(version_to_install.options) > 1
+            more_than_one_version = (
+                len(self.version_selector.version_to_install.options) > 1
+            )
             self.version_selector.disabled = (
                 busy or blocked_install or not more_than_one_version
             )
