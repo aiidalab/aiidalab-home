@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 """Module that contains widgets for managing AiiDAlab applications."""
-
-import sys
 from collections import namedtuple
 from subprocess import CalledProcessError
 
@@ -9,7 +7,6 @@ import ipywidgets as ipw
 import traitlets
 from aiidalab.app import AppRemoteUpdateStatus as AppStatus
 from aiidalab.app import AppVersion
-from aiidalab.utils import find_installed_packages
 from jinja2 import Template
 from packaging.version import parse
 
@@ -271,48 +268,6 @@ class AppManagerWidget(ipw.VBox):
             self.include_prereleases.value = (
                 self.include_prereleases.value or prerelease_installed
             )
-
-    def find_unmatched_requirements(self, app_version, python_bin):
-        """Calling find_incompatibilities and get unmatched requirements"""
-        return [
-            r[1] for r in self.app._app.find_incompatibilities(app_version, python_bin)
-        ]
-
-    def find_to_be_installed_dependencies(self, app_version, python_bin=None):
-        """return a list of Dependency"""
-        if python_bin is None:
-            python_bin = sys.executable
-
-        if app_version is None:
-            return []
-
-        dependencies_to_install = []
-        unmatched_requirements = self.find_unmatched_requirements(
-            app_version, python_bin
-        )
-        packages = find_installed_packages(python_bin)
-        for requirement in unmatched_requirements:
-            installed = "n/a"
-
-            for p in packages:
-                if requirement.name == p.name:
-                    installed = f"{p.name}=={p.version}"
-
-            dependencies_to_install.append(Dependency(installed, str(requirement)))
-
-        return dependencies_to_install
-
-    def _validate_strict_dependency(self, dependencies):
-        """Check dependencies that are not allowed to be override
-        return True if the strict dependencies satisfied
-
-        Note: Only check aiida-core compatibility at the moment
-        """
-        for dep in dependencies:
-            if "aiida-core" in dep.installed:
-                return False
-
-        return True
 
     def _refresh_widget_state(self, _=None):
         """Refresh the widget to reflect the current state of the app."""
