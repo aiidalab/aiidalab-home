@@ -282,7 +282,7 @@ class AppManagerWidget(ipw.VBox):
             cannot_reach_registry = (
                 self.app.remote_update_status is AppStatus.CANNOT_REACH_REGISTRY
             )
-            strict_dependencies_validation = self.app.strict_dependencies_validation
+            strict_dependencies_satisfied = self.app.strict_dependencies_satisfied
             busy = self.app.busy
             detached = self.app.detached
             available_versions = self.app.available_versions
@@ -304,7 +304,7 @@ class AppManagerWidget(ipw.VBox):
 
             # Check app version to install and show banner if core dependencies not compatible
             self.core_dependencies_compatibility_warning.layout.display = (
-                "block" if (not strict_dependencies_validation) else "none"
+                "block" if (not strict_dependencies_satisfied) else "none"
             )
 
             # Prepare warning icons and messages depending on whether we override or not.
@@ -320,11 +320,11 @@ class AppManagerWidget(ipw.VBox):
             can_switch = (
                 installed_version != version_to_install
                 and available_versions
-                and strict_dependencies_validation
+                and strict_dependencies_satisfied
             )
             latest_selected = self.version_selector.version_to_install.index == 0
             can_install = (can_switch and (detached or not latest_selected)) or (
-                not installed and strict_dependencies_validation
+                not installed and strict_dependencies_satisfied
             )
             can_uninstall = installed
             try:
