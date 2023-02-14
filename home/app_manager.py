@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """Module that contains widgets for managing AiiDAlab applications."""
-from collections import namedtuple
 from subprocess import CalledProcessError
 
 import ipywidgets as ipw
@@ -20,8 +19,6 @@ HTML_MSG_SUCCESS = """<i class="fa fa-check" style="color:#337ab7;font-size:1em;
 
 HTML_MSG_FAILURE = """<i class="fa fa-times" style="color:red;font-size:1em;" ></i>
 {}"""
-
-Dependency = namedtuple("Dependency", ["installed", "requirement"])
 
 
 class VersionSelectorWidget(ipw.VBox):
@@ -93,15 +90,17 @@ class AppManagerWidget(ipw.VBox):
     )
 
     CORE_DEPENDENCIES_COMPATIBILTIY_WARNING = Template(
-        """<div class="alert alert-danger">
-    The version to be install of this app is not compatible with this AiiDAlab environment.
-    </div>"""
+        """{% for required in unmet_required_packages %}
+                <div class="alert alert-danger">
+                Version "{{ required }}" is not compatible with this AiiDAlab environment.
+                </div>
+        {% endfor %}"""
     )
 
     DEPENDENCIES_INSTALL_INFO = Template(
         """<div class="alert alert-info alert-dismissible">
         <a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>
-            Following dependencie(s) will be changed:
+            The following dependencies will be changed:
             <ul>
             {% for p in dependencies_to_install %}
                 <li> {{ p.installed if p.installed is not none else '[Not Installed]' }} --> {{ p.required }} </li>
@@ -132,7 +131,7 @@ class AppManagerWidget(ipw.VBox):
         )
 
         self.core_dependencies_compatibility_warning = ipw.HTML(
-            self.CORE_DEPENDENCIES_COMPATIBILTIY_WARNING.render()
+            self.CORE_DEPENDENCIES_COMPATIBILTIY_WARNING.render(version="", app_name="")
         )
         self.core_dependencies_compatibility_warning.layout = {"width": "600px"}
         self.core_dependencies_compatibility_warning.layout.display = "none"
@@ -303,9 +302,20 @@ class AppManagerWidget(ipw.VBox):
             )
 
             # Check app version to install and show banner if core dependencies not compatible
-            self.core_dependencies_compatibility_warning.layout.display = (
-                "block" if (not strict_dependencies_satisfied) else "none"
-            )
+            if strict_dependencies_satisfied:
+                self.core_dependencies_compatibility_warning.layout.display = "none"
+            else:
+                unmet_required_packages = [
+                    d.required
+                    for d in dependencies_to_install
+                    if d.required.name in self.app._CORE_PACKAGES
+                ]
+                self.core_dependencies_compatibility_warning.layout.display = "block"
+                self.core_dependencies_compatibility_warning.value = (
+                    self.CORE_DEPENDENCIES_COMPATIBILTIY_WARNING.render(
+                        unmet_required_packages=unmet_required_packages,
+                    )
+                )
 
             # Prepare warning icons and messages depending on whether we override or not.
             # These messages and icons are only shown if needed.
