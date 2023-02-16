@@ -21,6 +21,29 @@ HTML_MSG_FAILURE = """<i class="fa fa-times" style="color:red;font-size:1em;" ><
 {}"""
 
 
+class HeaderWarning(ipw.HTML):
+    """Class to display a warning in the header."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.layout = ipw.Layout(
+            display="none",
+            width="600px",
+            height="auto",
+            margin="0px 0px 0px 0px",
+            padding="0px 0px 0px 0px",
+        )
+
+    def show(self, message):
+        """Show the warning."""
+        self.value = f"""<div class="alert alert-danger" role="alert">{message}</div>"""
+        self.layout.display = "block"
+
+    def hide(self):
+        """Hide the warning."""
+        self.layout.display = "none"
+
+
 class VersionSelectorWidget(ipw.VBox):
     """Class to choose app's version."""
 
@@ -64,12 +87,6 @@ class AppManagerWidget(ipw.VBox):
     an interface to install, uninstall, and update the application, as well as change
     versions if possible.
     """
-
-    COMPATIBILTIY_WARNING = Template(
-        """<div class="alert alert-danger">
-    The installed version of this app is not compatible with this AiiDAlab environment.
-    </div>"""
-    )
 
     COMPATIBILITY_INFO = Template(
         """<div class="alert alert-warning alert-dismissible">
@@ -116,11 +133,7 @@ class AppManagerWidget(ipw.VBox):
     def __init__(self, app, minimalistic=False):
         self.app = app
 
-        self.compatibility_warning = ipw.HTML(self.COMPATIBILTIY_WARNING.render())
-        self.compatibility_warning.layout = {"width": "600px"}
-        self.compatibility_warning.layout.display = (
-            "none"  # collapse the space that the widget took up
-        )
+        self.header_warning = HeaderWarning()
 
         body = ipw.HTML(self.TEMPLATE.render(app=app))
         body.layout = {"width": "600px"}
@@ -191,7 +204,7 @@ class AppManagerWidget(ipw.VBox):
         self._refresh_prereleases(change=dict(owner=self.app))  # initialize
 
         children = [
-            ipw.HBox([self.compatibility_warning]),
+            ipw.HBox([self.header_warning]),
             ipw.HBox([load_logo(app), body]),
             self.version_selector if not minimalistic else ipw.Box(),
             self.include_prereleases,
@@ -282,11 +295,20 @@ class AppManagerWidget(ipw.VBox):
             ) and not self.blocked_ignore.value
 
             # Check app compatibility and show banner if not compatible.
-            self.compatibility_warning.layout.display = (
-                "block"
-                if (not busy and self.app.is_installed() and not self.app.compatible)
-                else "none"
-            )
+            if not busy and self.app.is_installed() and not self.app.compatible:
+                self.header_warning.show(
+                    "The installed version of this app is not compatible with this AiiDAlab environment."
+                )
+            elif (
+                not busy
+                and not self.app.is_installed()
+                and not self.app.available_versions
+            ):
+                self.header_warning.show(
+                    "No version compatible with the current AiiDAlab environment found."
+                )
+            else:
+                self.header_warning.hide()
 
             # Prepare warning icons and messages depending on whether we override or not.
             # These messages and icons are only shown if needed.
