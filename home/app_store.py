@@ -166,7 +166,7 @@ class AiidaLabAppStore(ipw.HBox):
                         )
                     )
 
-                widget = AppStoreAppManagerWidget(app_base)
+                widget = AppStoreAppManagerWidget(app_base, minimalistic=True)
                 display(ipw.HTML("<hr>"))  # horizontal line
                 display(widget)
 

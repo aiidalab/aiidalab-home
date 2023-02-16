@@ -113,7 +113,7 @@ class AppManagerWidget(ipw.VBox):
     {% endif %}"""
     )
 
-    def __init__(self, app, with_version_selector=False):
+    def __init__(self, app, minimalistic=False):
         self.app = app
 
         self.compatibility_warning = ipw.HTML(self.COMPATIBILTIY_WARNING.render())
@@ -174,9 +174,7 @@ class AppManagerWidget(ipw.VBox):
             (self.version_selector.version_to_install, "value"),
             (self.app, "version_to_install"),
         )
-        self.version_selector.layout.visibility = (
-            "visible" if with_version_selector else "hidden"
-        )
+
         self.version_selector.disabled = True
         self.version_selector.version_to_install.observe(
             self._refresh_widget_state, "value"
@@ -195,7 +193,7 @@ class AppManagerWidget(ipw.VBox):
         children = [
             ipw.HBox([self.compatibility_warning]),
             ipw.HBox([load_logo(app), body]),
-            self.version_selector,
+            self.version_selector if not minimalistic else ipw.Box(),
             self.include_prereleases,
             ipw.HBox(
                 [
@@ -208,9 +206,14 @@ class AppManagerWidget(ipw.VBox):
             ipw.HBox([self.install_info]),
             ipw.HBox([self.dependencies_log]),
             ipw.HBox([self.issue_indicator, self.blocked_ignore]),
-            ipw.HBox([self.compatibility_info]),
-            ipw.HBox([self.dependencies_install_info]),
         ]
+        if not minimalistic:
+            children.extend(
+                [
+                    ipw.HBox([self.compatibility_info]),
+                    ipw.HBox([self.dependencies_install_info]),
+                ]
+            )
 
         super().__init__(children=children)
 
