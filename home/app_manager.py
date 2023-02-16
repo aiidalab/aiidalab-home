@@ -89,14 +89,6 @@ class AppManagerWidget(ipw.VBox):
         </div>"""
     )
 
-    CORE_DEPENDENCIES_COMPATIBILTIY_WARNING = Template(
-        """{% for required in unmet_required_packages %}
-                <div class="alert alert-danger">
-                Version "{{ required }}" is not compatible with this AiiDAlab environment.
-                </div>
-        {% endfor %}"""
-    )
-
     DEPENDENCIES_INSTALL_INFO = Template(
         """<div class="alert alert-info alert-dismissible">
         <a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>
@@ -129,12 +121,6 @@ class AppManagerWidget(ipw.VBox):
         self.compatibility_warning.layout.display = (
             "none"  # collapse the space that the widget took up
         )
-
-        self.core_dependencies_compatibility_warning = ipw.HTML(
-            self.CORE_DEPENDENCIES_COMPATIBILTIY_WARNING.render(version="", app_name="")
-        )
-        self.core_dependencies_compatibility_warning.layout = {"width": "600px"}
-        self.core_dependencies_compatibility_warning.layout.display = "none"
 
         body = ipw.HTML(self.TEMPLATE.render(app=app))
         body.layout = {"width": "600px"}
@@ -208,7 +194,6 @@ class AppManagerWidget(ipw.VBox):
 
         children = [
             ipw.HBox([self.compatibility_warning]),
-            ipw.HBox([self.core_dependencies_compatibility_warning]),
             ipw.HBox([load_logo(app), body]),
             self.version_selector,
             self.include_prereleases,
@@ -281,7 +266,6 @@ class AppManagerWidget(ipw.VBox):
             cannot_reach_registry = (
                 self.app.remote_update_status is AppStatus.CANNOT_REACH_REGISTRY
             )
-            strict_dependencies_satisfied = self.app.strict_dependencies_satisfied
             busy = self.app.busy
             detached = self.app.detached
             available_versions = self.app.available_versions
@@ -301,22 +285,6 @@ class AppManagerWidget(ipw.VBox):
                 else "none"
             )
 
-            # Check app version to install and show banner if core dependencies not compatible
-            if strict_dependencies_satisfied:
-                self.core_dependencies_compatibility_warning.layout.display = "none"
-            else:
-                unmet_required_packages = [
-                    d.required
-                    for d in dependencies_to_install
-                    if d.required.name in self.app._CORE_PACKAGES
-                ]
-                self.core_dependencies_compatibility_warning.layout.display = "block"
-                self.core_dependencies_compatibility_warning.value = (
-                    self.CORE_DEPENDENCIES_COMPATIBILTIY_WARNING.render(
-                        unmet_required_packages=unmet_required_packages,
-                    )
-                )
-
             # Prepare warning icons and messages depending on whether we override or not.
             # These messages and icons are only shown if needed.
             warn_or_ban_icon = "warning" if override else "ban"
@@ -327,15 +295,11 @@ class AppManagerWidget(ipw.VBox):
             tooltip_incompatible = "The app is not supported for this environment."
 
             # Determine whether we can install, updated, and uninstall.
-            can_switch = (
-                installed_version != version_to_install
-                and available_versions
-                and strict_dependencies_satisfied
-            )
+            can_switch = installed_version != version_to_install and available_versions
             latest_selected = self.version_selector.version_to_install.index == 0
-            can_install = (can_switch and (detached or not latest_selected)) or (
-                not installed and strict_dependencies_satisfied
-            )
+            can_install = (
+                can_switch and (detached or not latest_selected)
+            ) or not installed
             can_uninstall = installed
             try:
                 can_update = (
