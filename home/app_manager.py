@@ -319,12 +319,14 @@ class AppManagerWidget(ipw.VBox):
                 tooltip_danger = "Operation blocked due to potential data loss."
             tooltip_incompatible = "The app is not supported for this environment."
 
-            # Determine whether we can install, updated, and uninstall.
-            can_switch = installed_version != version_to_install and available_versions
+            # Determine whether the app can be installed, updated, and uninstalled.
+            can_switch = bool(
+                installed_version != version_to_install and available_versions
+            )
             latest_selected = self.version_selector.version_to_install.index == 0
-            can_install = (
+            can_install = bool(
                 can_switch and (detached or not latest_selected)
-            ) or not installed
+            ) or bool(not installed and available_versions)
             can_uninstall = installed
             try:
                 can_update = (
