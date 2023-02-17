@@ -277,7 +277,6 @@ class AppManagerWidget(ipw.VBox):
             installed_version = self.app.installed_version
             version_to_install = self.app.version_to_install
             dependencies_to_install = self.app.dependencies_to_install
-            compatible = len(self.app.available_versions) > 0
             registered = self.app.remote_update_status is not AppStatus.NOT_REGISTERED
             cannot_reach_registry = (
                 self.app.remote_update_status is AppStatus.CANNOT_REACH_REGISTRY
@@ -285,6 +284,9 @@ class AppManagerWidget(ipw.VBox):
             busy = self.app.busy
             detached = self.app.detached
             available_versions = self.app.available_versions
+            compatible = (
+                len(available_versions) > 0
+            )  # Compatibility of the app, not the version: self.app.compatible.
 
             override = detached and self.blocked_ignore.value
             blocked_install = (
@@ -294,16 +296,12 @@ class AppManagerWidget(ipw.VBox):
                 detached or not registered or cannot_reach_registry
             ) and not self.blocked_ignore.value
 
-            # Check app compatibility and show banner if not compatible.
-            if not busy and self.app.is_installed() and not self.app.compatible:
+            # Check the compatibility of current installed version and show banner if not compatible.
+            if not busy and installed and not self.app.compatible:
                 self.header_warning.show(
                     "The installed version of this app is not compatible with this AiiDAlab environment."
                 )
-            elif (
-                not busy
-                and not self.app.is_installed()
-                and not self.app.available_versions
-            ):
+            elif not busy and not installed and not available_versions:
                 self.header_warning.show(
                     "No version compatible with the current AiiDAlab environment found."
                 )
@@ -384,7 +382,7 @@ class AppManagerWidget(ipw.VBox):
 
             # Update the update button state.
             self.update_button.disabled = busy or blocked_install or not can_update
-            if self.app.is_installed() and can_update is None:
+            if installed and can_update is None:
                 self.update_button.icon = "warning"
                 self.update_button.tooltip = (
                     "Unable to determine availability of updates."
