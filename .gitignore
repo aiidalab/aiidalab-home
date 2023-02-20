@@ -5,3 +5,4 @@
 .launcher.json
 apps_meta.sqlite
 .vscode
+*.egg-info
