@@ -303,7 +303,7 @@ class AppManagerWidget(ipw.VBox):
                 )
             elif not busy and not installed and not available_versions:
                 self.header_warning.show(
-                    "No version compatible with the current AiiDAlab environment found."
+                    f"No version of <b>{self.app.title}</b> compatible with the current AiiDAlab environment found."
                 )
             else:
                 self.header_warning.hide()
@@ -425,13 +425,15 @@ class AppManagerWidget(ipw.VBox):
                     f'<i class="fa fa-{warn_or_ban_icon}"></i> The app has local modifications or was checked out '
                     "to an unknown version."
                 )
-            elif not compatible:
-                self.issue_indicator.value = f'<i class="fa fa-{warn_or_ban_icon}"></i> The app is not supported for this environment.'
             else:
                 self.issue_indicator.value = ""
             self.blocked_ignore.layout.visibility = (
                 "visible" if (detached or not compatible) else "hidden"
             )
+
+            if not compatible:
+                self.issue_indicator.value = f'<i class="fa fa-{warn_or_ban_icon}"></i> The app is not supported for this environment.'
+                self.blocked_ignore.layout.visibility = "hidden"
 
             if (
                 not busy
