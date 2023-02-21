@@ -335,7 +335,8 @@ class AppManagerWidget(ipw.VBox):
                 can_update = None
 
             # Update the install button state.
-            self.install_button.disabled = busy or blocked_install or not can_install
+            disable_install_button = busy or blocked_install or not can_install
+            self.install_button.disabled = disable_install_button
             self.install_button.button_style = "info" if can_install else ""
             self.install_button.icon = (
                 ""
@@ -362,7 +363,7 @@ class AppManagerWidget(ipw.VBox):
                 )
             self.install_button.description = (
                 "Install"
-                if not (installed and can_install)
+                if disable_install_button
                 else f"Install ({self._formatted_version(version_to_install)})"
             )
 
