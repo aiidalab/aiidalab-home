@@ -5,11 +5,11 @@ from subprocess import CalledProcessError
 
 import ipywidgets as ipw
 import traitlets
-from aiidalab.app import AppRemoteUpdateStatus as AppStatus
-from aiidalab.app import AppVersion
 from jinja2 import Template
 from packaging.version import parse
 
+from aiidalab.app import AppRemoteUpdateStatus as AppStatus
+from aiidalab.app import AppVersion
 from home.utils import load_logo
 from home.widgets import LogOutputWidget, Spinner, StatusHTML
 
@@ -410,9 +410,7 @@ class AppManagerWidget(ipw.VBox):
 
     def _show_msg_failure(self, msg):
         """Show a message indicating failure to execute a requested operation."""
-        # DH: Setting the value directly so that the error message
-        # does not disappear
-        self.install_info.value = HTML_MSG_FAILURE.format(msg)
+        self.install_info.show_temporary_message(HTML_MSG_FAILURE.format(msg))
 
     def _check_detached_state(self):
         """Check whether the app is in a detached state which would prevent any install or other operations."""
