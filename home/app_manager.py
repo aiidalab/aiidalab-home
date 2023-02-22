@@ -118,7 +118,7 @@ class AppManagerWidget(ipw.VBox):
         )  # show empty line by default
 
         self.dependencies_log = LogOutputWidget(
-            layout=ipw.Layout(min_height="0px", max_height="100px")
+            layout=ipw.Layout(min_height="0px", max_height="400px")
         )  # max_height controls the maximum height of the log field.
         self.dependencies_log.template = (
             "Installing dependencies..." + self.dependencies_log.template
