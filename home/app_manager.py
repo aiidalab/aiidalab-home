@@ -118,7 +118,7 @@ class AppManagerWidget(ipw.VBox):
         )  # show empty line by default
 
         self.dependencies_log = LogOutputWidget(
-            layout=ipw.Layout(min_height="0px", max_height="100px")
+            layout=ipw.Layout(min_height="0px", max_height="400px")
         )  # max_height controls the maximum height of the log field.
         self.dependencies_log.template = (
             "Installing dependencies..." + self.dependencies_log.template
@@ -410,7 +410,9 @@ class AppManagerWidget(ipw.VBox):
 
     def _show_msg_failure(self, msg):
         """Show a message indicating failure to execute a requested operation."""
-        self.install_info.show_temporary_message(HTML_MSG_FAILURE.format(msg))
+        # DH: Setting the value directly so that the error message
+        # does not disappear
+        self.install_info.value = HTML_MSG_FAILURE.format(msg)
 
     def _check_detached_state(self):
         """Check whether the app is in a detached state which would prevent any install or other operations."""
