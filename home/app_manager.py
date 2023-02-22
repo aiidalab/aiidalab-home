@@ -5,11 +5,11 @@ from subprocess import CalledProcessError
 
 import ipywidgets as ipw
 import traitlets
+from aiidalab.app import AppRemoteUpdateStatus as AppStatus
+from aiidalab.app import AppVersion
 from jinja2 import Template
 from packaging.version import parse
 
-from aiidalab.app import AppRemoteUpdateStatus as AppStatus
-from aiidalab.app import AppVersion
 from home.utils import load_logo
 from home.widgets import LogOutputWidget, Spinner, StatusHTML
 
