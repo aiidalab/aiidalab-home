@@ -431,10 +431,6 @@ class AppManagerWidget(ipw.VBox):
                 "visible" if (detached or not compatible) else "hidden"
             )
 
-            if not compatible:
-                self.issue_indicator.value = f'<i class="fa fa-{warn_or_ban_icon}"></i> The app is not supported for this environment.'
-                self.blocked_ignore.layout.visibility = "hidden"
-
             if (
                 not busy
                 and any(self.app.compatibility_info.values())
