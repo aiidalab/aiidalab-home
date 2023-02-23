@@ -103,6 +103,8 @@ class AppManagerWidget(ipw.VBox):
                 </li>
             {% endfor %}
             </ul>
+
+            The compatibility of dependencies may break by other apps, you can uninstall and install this app again to fix it
         </div>"""
     )
 
