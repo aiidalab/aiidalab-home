@@ -104,7 +104,7 @@ class AppManagerWidget(ipw.VBox):
             {% endfor %}
             </ul>
 
-            The compatibility of dependencies may break by other apps, you can uninstall and install this app again to fix it
+            The compatibility issues may be caused by other installed apps. To solve this, you can re-install this app, and uninstall the app that caused the conflict.
         </div>"""
     )
 
@@ -117,6 +117,8 @@ class AppManagerWidget(ipw.VBox):
                 <li> {{ p.installed if p.installed is not none else '[Not Installed]' }} --> {{ p.required }} </li>
             {% endfor %}
             </ul>
+
+            WARNING: Reinstalling previously installed dependencies may break already installed apps. If that happens, uninstall this app and reinstall the app that was broken.
         </div>"""
     )
 
