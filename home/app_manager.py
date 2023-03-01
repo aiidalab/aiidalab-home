@@ -128,7 +128,7 @@ class AppManagerWidget(ipw.VBox):
     <b>Authors:</b> {{ app.authors }}
     <br>
     <b>Description:</b> {{ app.description }}
-    {% if app.url %}
+    {% if app.url and app.url.startswith("http") %}
     <br>
     <b>URL:</b> <a href="{{ app.url }}">{{ app.url }}</a>
     {% endif %}"""
@@ -148,7 +148,7 @@ class AppManagerWidget(ipw.VBox):
         )  # show empty line by default
 
         self.dependencies_log = LogOutputWidget(
-            layout=ipw.Layout(min_height="0px", max_height="100px")
+            layout=ipw.Layout(min_height="0px", max_height="400px")
         )  # max_height controls the maximum height of the log field.
         self.dependencies_log.template = (
             "Installing dependencies..." + self.dependencies_log.template
@@ -439,6 +439,7 @@ class AppManagerWidget(ipw.VBox):
                 not busy
                 and any(self.app.compatibility_info.values())
                 and not self.app.compatible
+                and self.app.is_installed()
             ):
                 self.compatibility_info.value = self.COMPATIBILITY_INFO.render(
                     app=self.app
