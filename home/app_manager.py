@@ -96,7 +96,7 @@ class AppManagerWidget(ipw.VBox):
     <b>Authors:</b> {{ app.authors }}
     <br>
     <b>Description:</b> {{ app.description }}
-    {% if app.url %}
+    {% if app.url and app.url.startswith("http") %}
     <br>
     <b>URL:</b> <a href="{{ app.url }}">{{ app.url }}</a>
     {% endif %}"""
