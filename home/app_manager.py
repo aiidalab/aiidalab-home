@@ -4,11 +4,11 @@ from subprocess import CalledProcessError
 
 import ipywidgets as ipw
 import traitlets
-from aiidalab.app import AppRemoteUpdateStatus as AppStatus
-from aiidalab.app import AppVersion
 from jinja2 import Template
 from packaging.version import parse
 
+from aiidalab.app import AppRemoteUpdateStatus as AppStatus
+from aiidalab.app import AppVersion
 from home.utils import load_logo
 from home.widgets import LogOutputWidget, Spinner, StatusHTML
 
@@ -118,7 +118,8 @@ class AppManagerWidget(ipw.VBox):
             {% endfor %}
             </ul>
 
-            WARNING: Reinstalling previously installed dependencies may break already installed apps. If that happens, uninstall this app and reinstall the app that was broken.
+            WARNING: Reinstalling previously installed dependencies may break already installed apps.<br>
+            If that happens, uninstall this app and reinstall the app that was broken.
         </div>"""
     )
 
@@ -166,6 +167,7 @@ class AppManagerWidget(ipw.VBox):
 
         self.issue_indicator = ipw.HTML()
         self.blocked_ignore = ipw.Checkbox(description="Ignore")
+        self.blocked_ignore.layout.visibility = "hidden"
         self.blocked_ignore.observe(self._refresh_widget_state)
 
         self.compatibility_info = ipw.HTML()
@@ -294,8 +296,8 @@ class AppManagerWidget(ipw.VBox):
 
             override = detached and self.blocked_ignore.value
             blocked_install = (
-                detached or not compatible
-            ) and not self.blocked_ignore.value
+                detached and not self.blocked_ignore.value
+            ) or not compatible
             blocked_uninstall = (
                 detached or not registered or cannot_reach_registry
             ) and not self.blocked_ignore.value
@@ -307,7 +309,7 @@ class AppManagerWidget(ipw.VBox):
                 )
             elif not busy and not installed and not available_versions:
                 self.header_warning.show(
-                    f"No version of <b>{self.app.title}</b> compatible with the current AiiDAlab environment found."
+                    f"There is no version of <b>{self.app.title}</b> compatible with this AiiDAlab environment."
                 )
             else:
                 self.header_warning.hide()
@@ -431,9 +433,8 @@ class AppManagerWidget(ipw.VBox):
                 )
             else:
                 self.issue_indicator.value = ""
-            self.blocked_ignore.layout.visibility = (
-                "visible" if (detached or not compatible) else "hidden"
-            )
+
+            self.blocked_ignore.layout.visibility = "visible" if detached else "hidden"
 
             if (
                 not busy
