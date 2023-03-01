@@ -397,6 +397,7 @@ class AppManagerWidget(ipw.VBox):
                 not busy
                 and any(self.app.compatibility_info.values())
                 and self.app.compatible is False
+                and self.app.is_installed()
             ):
                 self.compatibility_info.value = self.COMPATIBILITY_INFO.render(
                     app=self.app
