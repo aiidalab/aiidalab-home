@@ -159,11 +159,11 @@ class AppWidget(ipw.VBox):
             header_items.append(app_status_info)
 
             footer_items.append(
-                f"<a href=./single_app.ipynb?app={app.name}><button>Manage App</button></a>"
+                f"""<a href=./single_app.ipynb?app={app.name} target="_blank"><button>Manage App</button></a>"""
             )
             if app.metadata.get("external_url"):
                 footer_items.append(
-                    f"""<a href="{app.metadata['external_url']}"><button>URL</button></a>"""
+                    f"""<a href="{app.metadata['external_url']}" target="_blank"><button>URL</button></a>"""
                 )
 
         if allow_move:
