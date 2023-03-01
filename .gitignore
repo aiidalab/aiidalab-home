@@ -6,3 +6,5 @@
 apps_meta.sqlite
 .vscode
 *.egg-info
+aiidalab_home.egg-info/*
+build/*

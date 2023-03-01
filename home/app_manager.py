@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """Module that contains widgets for managing AiiDAlab applications."""
-
 from subprocess import CalledProcessError
 
 import ipywidgets as ipw
@@ -20,6 +19,29 @@ HTML_MSG_SUCCESS = """<i class="fa fa-check" style="color:#337ab7;font-size:1em;
 
 HTML_MSG_FAILURE = """<i class="fa fa-times" style="color:red;font-size:1em;" ></i>
 {}"""
+
+
+class HeaderWarning(ipw.HTML):
+    """Class to display a warning in the header."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.layout = ipw.Layout(
+            display="none",
+            width="600px",
+            height="auto",
+            margin="0px 0px 0px 0px",
+            padding="0px 0px 0px 0px",
+        )
+
+    def show(self, message):
+        """Show the warning."""
+        self.value = f"""<div class="alert alert-danger" role="alert">{message}</div>"""
+        self.layout.display = "block"
+
+    def hide(self):
+        """Hide the warning."""
+        self.layout.display = "none"
 
 
 class VersionSelectorWidget(ipw.VBox):
@@ -66,12 +88,6 @@ class AppManagerWidget(ipw.VBox):
     versions if possible.
     """
 
-    COMPATIBILTIY_WARNING = Template(
-        """<div class="alert alert-danger">
-    The installed version of this app is not compatible with this AiiDAlab environment.
-    </div>"""
-    )
-
     COMPATIBILITY_INFO = Template(
         """<div class="alert alert-warning alert-dismissible">
         <a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>
@@ -87,6 +103,23 @@ class AppManagerWidget(ipw.VBox):
                 </li>
             {% endfor %}
             </ul>
+
+            The compatibility issues may be caused by other installed apps. To solve this, you can re-install this app, and uninstall the app that caused the conflict.
+        </div>"""
+    )
+
+    DEPENDENCIES_INSTALL_INFO = Template(
+        """<div class="alert alert-info alert-dismissible">
+        <a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>
+            The following dependencies will be changed:
+            <ul>
+            {% for p in dependencies_to_install %}
+                <li> {{ p.installed if p.installed is not none else '[Not Installed]' }} --> {{ p.required }} </li>
+            {% endfor %}
+            </ul>
+
+            WARNING: Reinstalling previously installed dependencies may break already installed apps.<br>
+            If that happens, uninstall this app and reinstall the app that was broken.
         </div>"""
     )
 
@@ -102,12 +135,10 @@ class AppManagerWidget(ipw.VBox):
     {% endif %}"""
     )
 
-    def __init__(self, app, with_version_selector=False):
+    def __init__(self, app, minimalistic=False):
         self.app = app
 
-        self.compatibility_warning = ipw.HTML(self.COMPATIBILTIY_WARNING.render())
-        self.compatibility_warning.layout = {"width": "600px"}
-        self.compatibility_warning.layout.visibility = "hidden"
+        self.header_warning = HeaderWarning()
 
         body = ipw.HTML(self.TEMPLATE.render(app=app))
         body.layout = {"width": "600px"}
@@ -136,29 +167,14 @@ class AppManagerWidget(ipw.VBox):
 
         self.issue_indicator = ipw.HTML()
         self.blocked_ignore = ipw.Checkbox(description="Ignore")
+        self.blocked_ignore.layout.visibility = "hidden"
         self.blocked_ignore.observe(self._refresh_widget_state)
 
         self.compatibility_info = ipw.HTML()
+        self.dependencies_install_info = ipw.HTML()
 
         self.spinner = Spinner("color:#337ab7;font-size:1em;")
         ipw.dlink((self.app, "busy"), (self.spinner, "enabled"))
-
-        children = [
-            ipw.HBox([self.compatibility_warning]),
-            ipw.HBox([load_logo(app), body]),
-            ipw.HBox(
-                [
-                    self.uninstall_button,
-                    self.install_button,
-                    self.update_button,
-                    self.spinner,
-                ]
-            ),
-            ipw.HBox([self.install_info]),
-            ipw.HBox([self.dependencies_log]),
-            ipw.HBox([self.issue_indicator, self.blocked_ignore]),
-            ipw.HBox([self.compatibility_info]),
-        ]
 
         self.version_selector = VersionSelectorWidget()
         ipw.dlink(
@@ -173,14 +189,15 @@ class AppManagerWidget(ipw.VBox):
             (self.version_selector.installed_version, "value"),
             transform=self._formatted_version,
         )
-        self.version_selector.layout.visibility = (
-            "visible" if with_version_selector else "hidden"
+        ipw.dlink(
+            (self.version_selector.version_to_install, "value"),
+            (self.app, "version_to_install"),
         )
+
         self.version_selector.disabled = True
         self.version_selector.version_to_install.observe(
             self._refresh_widget_state, "value"
         )
-        children.insert(2, self.version_selector)
 
         # Prereleases opt-in
         self.include_prereleases = ipw.Checkbox(description="Include prereleases")
@@ -191,7 +208,31 @@ class AppManagerWidget(ipw.VBox):
             self._refresh_prereleases, names=["has_prereleases", "installed_version"]
         )
         self._refresh_prereleases(change=dict(owner=self.app))  # initialize
-        children.insert(3, self.include_prereleases)
+
+        children = [
+            ipw.HBox([self.header_warning]),
+            ipw.HBox([load_logo(app), body]),
+            self.version_selector if not minimalistic else ipw.Box(),
+            self.include_prereleases,
+            ipw.HBox(
+                [
+                    self.uninstall_button,
+                    self.install_button,
+                    self.update_button,
+                    self.spinner,
+                ]
+            ),
+            ipw.HBox([self.install_info]),
+            ipw.HBox([self.dependencies_log]),
+            ipw.HBox([self.issue_indicator, self.blocked_ignore]),
+        ]
+        if not minimalistic:
+            children.extend(
+                [
+                    ipw.HBox([self.compatibility_info]),
+                    ipw.HBox([self.dependencies_install_info]),
+                ]
+            )
 
         super().__init__(children=children)
 
@@ -240,7 +281,8 @@ class AppManagerWidget(ipw.VBox):
             # Collect information about app state.
             installed = self.app.is_installed()
             installed_version = self.app.installed_version
-            compatible = len(self.app.available_versions) > 0
+            version_to_install = self.app.version_to_install
+            dependencies_to_install = self.app.dependencies_to_install
             registered = self.app.remote_update_status is not AppStatus.NOT_REGISTERED
             cannot_reach_registry = (
                 self.app.remote_update_status is AppStatus.CANNOT_REACH_REGISTRY
@@ -248,25 +290,29 @@ class AppManagerWidget(ipw.VBox):
             busy = self.app.busy
             detached = self.app.detached
             available_versions = self.app.available_versions
+            compatible = (
+                len(available_versions) > 0
+            )  # Compatibility of the app, not the version: self.app.compatible.
 
             override = detached and self.blocked_ignore.value
             blocked_install = (
-                detached or not compatible
-            ) and not self.blocked_ignore.value
+                detached and not self.blocked_ignore.value
+            ) or not compatible
             blocked_uninstall = (
                 detached or not registered or cannot_reach_registry
             ) and not self.blocked_ignore.value
 
-            # Check app compatibility and show banner if not compatible.
-            self.compatibility_warning.layout.visibility = (
-                "visible"
-                if (
-                    not busy
-                    and self.app.is_installed()
-                    and self.app.compatible is False
+            # Check the compatibility of current installed version and show banner if not compatible.
+            if not busy and installed and not self.app.compatible:
+                self.header_warning.show(
+                    "The installed version of this app is not compatible with this AiiDAlab environment."
                 )
-                else "hidden"
-            )
+            elif not busy and not installed and not available_versions:
+                self.header_warning.show(
+                    f"There is no version of <b>{self.app.title}</b> compatible with this AiiDAlab environment."
+                )
+            else:
+                self.header_warning.hide()
 
             # Prepare warning icons and messages depending on whether we override or not.
             # These messages and icons are only shown if needed.
@@ -277,15 +323,14 @@ class AppManagerWidget(ipw.VBox):
                 tooltip_danger = "Operation blocked due to potential data loss."
             tooltip_incompatible = "The app is not supported for this environment."
 
-            # Determine whether we can install, updated, and uninstall.
-            can_switch = (
-                installed_version != self.version_selector.version_to_install.value
-                and available_versions
+            # Determine whether the app can be installed, updated, and uninstalled.
+            can_switch = bool(
+                installed_version != version_to_install and available_versions
             )
             latest_selected = self.version_selector.version_to_install.index == 0
-            can_install = (
+            can_install = bool(
                 can_switch and (detached or not latest_selected)
-            ) or not installed
+            ) or bool(not installed and available_versions)
             can_uninstall = installed
             try:
                 can_update = (
@@ -296,7 +341,8 @@ class AppManagerWidget(ipw.VBox):
                 can_update = None
 
             # Update the install button state.
-            self.install_button.disabled = busy or blocked_install or not can_install
+            disable_install_button = busy or blocked_install or not can_install
+            self.install_button.disabled = disable_install_button
             self.install_button.button_style = "info" if can_install else ""
             self.install_button.icon = (
                 ""
@@ -323,8 +369,8 @@ class AppManagerWidget(ipw.VBox):
                 )
             self.install_button.description = (
                 "Install"
-                if not (installed and can_install)
-                else f"Install ({self._formatted_version(self.version_selector.version_to_install.value)})"
+                if disable_install_button
+                else f"Install ({self._formatted_version(version_to_install)})"
             )
 
             # Update the uninstall button state.
@@ -343,7 +389,7 @@ class AppManagerWidget(ipw.VBox):
 
             # Update the update button state.
             self.update_button.disabled = busy or blocked_install or not can_update
-            if self.app.is_installed() and can_update is None:
+            if installed and can_update is None:
                 self.update_button.icon = "warning"
                 self.update_button.tooltip = (
                     "Unable to determine availability of updates."
@@ -385,18 +431,15 @@ class AppManagerWidget(ipw.VBox):
                     f'<i class="fa fa-{warn_or_ban_icon}"></i> The app has local modifications or was checked out '
                     "to an unknown version."
                 )
-            elif not compatible:
-                self.issue_indicator.value = f'<i class="fa fa-{warn_or_ban_icon}"></i> The app is not supported for this environment.'
             else:
                 self.issue_indicator.value = ""
-            self.blocked_ignore.layout.visibility = (
-                "visible" if (detached or not compatible) else "hidden"
-            )
+
+            self.blocked_ignore.layout.visibility = "visible" if detached else "hidden"
 
             if (
                 not busy
                 and any(self.app.compatibility_info.values())
-                and self.app.compatible is False
+                and not self.app.compatible
                 and self.app.is_installed()
             ):
                 self.compatibility_info.value = self.COMPATIBILITY_INFO.render(
@@ -404,6 +447,16 @@ class AppManagerWidget(ipw.VBox):
                 )
             else:
                 self.compatibility_info.value = ""
+
+            # Check and show the dependencies install infos
+            if not busy and can_switch and any(dependencies_to_install):
+                self.dependencies_install_info.value = (
+                    self.DEPENDENCIES_INSTALL_INFO.render(
+                        dependencies_to_install=dependencies_to_install,
+                    )
+                )
+            else:
+                self.dependencies_install_info.value = ""
 
     def _show_msg_success(self, msg):
         """Show a message indicating successful execution of a requested operation."""
