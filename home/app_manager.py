@@ -303,7 +303,12 @@ class AppManagerWidget(ipw.VBox):
             ) and not self.blocked_ignore.value
 
             # Check the compatibility of current installed version and show banner if not compatible.
-            if not busy and installed and not self.app.compatible:
+            if (
+                not busy
+                and installed
+                and not self.app.compatible
+                and not self.app.detached
+            ):
                 self.header_warning.show(
                     "The installed version of this app is not compatible with this AiiDAlab environment."
                 )
