@@ -40,7 +40,6 @@ def load_start_md(name):
     """Load app appearance from a Markdown file."""
     fname = path.join(AIIDALAB_APPS, name, "start.md")
     try:
-
         md_src = open(fname).read()
         md_src = md_src.replace("](./", "](../{}/".format(name))
         html = markdown(md_src)

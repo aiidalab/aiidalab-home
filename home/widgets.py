@@ -158,7 +158,6 @@ class Spinner(ipw.HTML):
 
 
 class LogOutputWidget(ipw.VBox):
-
     value = traitlets.Unicode()
     template = traitlets.Unicode()
 

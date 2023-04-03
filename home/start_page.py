@@ -102,7 +102,6 @@ class AiidaLabHome:
 
         with self.output:
             for name in apps:
-
                 # Create app widget if it has not been created yet.
                 if name not in self._app_widgets:
                     self._app_widgets[name] = self._create_app_widget(name)

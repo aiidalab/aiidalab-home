@@ -174,7 +174,6 @@ class AiidaLabAppStore(ipw.HBox):
 
 
 class AppStoreAppManagerWidget(AppManagerWidget):
-
     TEMPLATE = Template(
         """<h2 style="text-align:center;">{{ app.title }}</h2>
     <div style="font-size: 15px; font-style: italic">Description: {{ app.description | truncate(200) }}</div>
