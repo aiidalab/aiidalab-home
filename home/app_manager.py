@@ -69,9 +69,9 @@ class VersionSelectorWidget(ipw.VBox):
         )
 
         super().__init__(
+            *args,
             children=[self.installed_version, self.version_to_install, self.info],
             layout={"min_width": "300px"},
-            *args,
             **kwargs,
         )
 
