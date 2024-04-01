@@ -1,4 +1,5 @@
 """Module to generate AiiDAlab home page."""
+
 import json
 from functools import wraps
 from glob import glob
