@@ -347,25 +347,19 @@ class AppManagerWidget(ipw.VBox):
             self.install_button.icon = (
                 ""
                 if can_install and not detached
-                else warn_or_ban_icon
-                if can_install
-                else ""
+                else warn_or_ban_icon if can_install else ""
             )
             if self.app.compatible:
                 self.install_button.tooltip = (
                     ""
                     if can_install and not detached
-                    else tooltip_danger
-                    if can_install
-                    else ""
+                    else tooltip_danger if can_install else ""
                 )
             else:
                 self.install_button.tooltip = (
                     ""
                     if installed and not detached
-                    else tooltip_danger
-                    if installed
-                    else tooltip_incompatible
+                    else tooltip_danger if installed else tooltip_incompatible
                 )
             self.install_button.description = (
                 "Install"
@@ -382,9 +376,7 @@ class AppManagerWidget(ipw.VBox):
             self.uninstall_button.tooltip = (
                 ""
                 if can_uninstall and not detached
-                else tooltip_danger
-                if can_uninstall
-                else ""
+                else tooltip_danger if can_uninstall else ""
             )
 
             # Update the update button state.
@@ -398,17 +390,13 @@ class AppManagerWidget(ipw.VBox):
                 self.update_button.icon = (
                     "arrow-circle-up"
                     if can_update and not detached
-                    else warn_or_ban_icon
-                    if can_update
-                    else ""
+                    else warn_or_ban_icon if can_update else ""
                 )
                 self.update_button.button_style = "success" if can_update else ""
                 self.update_button.tooltip = (
                     ""
                     if can_update and not detached
-                    else tooltip_danger
-                    if can_update
-                    else ""
+                    else tooltip_danger if can_update else ""
                 )
 
             # Update the version_selector widget state.
