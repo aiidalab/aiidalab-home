@@ -33,7 +33,7 @@ def load_start_py(name):
         except TypeError:
             return mod.get_start_widget(appbase=appbase, jupbase=jupbase)
     except Exception:  # pylint: disable=broad-except
-        return ipw.HTML("<pre>{}</pre>".format(sys.exc_info()))
+        return ipw.HTML(f"<pre>{sys.exc_info()}</pre>")
 
 
 def load_start_md(name):
@@ -41,7 +41,7 @@ def load_start_md(name):
     fname = path.join(AIIDALAB_APPS, name, "start.md")
     try:
         md_src = open(fname).read()
-        md_src = md_src.replace("](./", "](../{}/".format(name))
+        md_src = md_src.replace("](./", f"](../{name}/")
         html = markdown(md_src)
 
         # open links in new window/tab
@@ -52,7 +52,7 @@ def load_start_md(name):
         return ipw.HTML(html)
 
     except Exception as exc:  # pylint: disable=broad-except
-        return ipw.HTML("Could not load start.md: {}".format(str(exc)))
+        return ipw.HTML(f"Could not load start.md: {exc!s}")
 
 
 def load_logo(app):

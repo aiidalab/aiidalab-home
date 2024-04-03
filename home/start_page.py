@@ -61,7 +61,7 @@ class AiidaLabHome:
     def __init__(self):
         self.config_fn = ".launcher.json"
         self.output = ipw.Output()
-        self._app_widgets = dict()
+        self._app_widgets = {}
 
     def _create_app_widget(self, name):
         """Create the widget representing the app on the home screen."""
@@ -93,7 +93,7 @@ class AiidaLabHome:
 
     def read_config(self):
         if path.exists(self.config_fn):
-            return json.load(open(self.config_fn, "r"))
+            return json.load(open(self.config_fn))
         return {"order": [], "hidden": []}  # default config
 
     def render(self):
@@ -125,7 +125,7 @@ class AiidaLabHome:
         apps.sort(key=lambda x: order.index(x) if x in order else -1)
         config["order"] = apps
         self.write_config(config)
-        return ["home"] + apps
+        return ["home", *apps]
 
     def move_updown(self, name, delta):
         """Move the app up/down on the start page."""
