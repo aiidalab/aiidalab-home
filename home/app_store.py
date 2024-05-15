@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 """AiiDAlab app store."""
+
 import logging
 
 import ipywidgets as ipw
@@ -21,7 +21,7 @@ class AiidaLabAppStore(ipw.HBox):
             self.index = load_app_registry_index()
         except RuntimeError as error:
             logger.warning(error)
-            self.index = dict(apps=[], categories=[])
+            self.index = {"apps": [], "categories": []}
         self.output = ipw.Output()
 
         # Apps per page.
@@ -120,12 +120,8 @@ class AiidaLabAppStore(ipw.HBox):
 
         if self.category_filter.value:
             all_apps = self.apps_to_display
-            self.apps_to_display = (
-                []
-            )  # clear the array that contains all the apps to be displayed
-            self.app_corresponding_categories = (
-                []
-            )  # create a parallel array that contains corresponding category names
+            self.apps_to_display = []  # clear the array that contains all the apps to be displayed
+            self.app_corresponding_categories = []  # create a parallel array that contains corresponding category names
             # iterate over all categories
             for category in self.category_filter.value:
                 category_key = self.category_title_key_mapping[category]
