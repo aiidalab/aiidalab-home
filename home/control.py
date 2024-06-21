@@ -64,13 +64,18 @@ class DaemonControlWidget(ipw.VBox):
     def _update_status(self, _=None):
         self._clear_status()
         with self._status:
-            result = subprocess.run(
+            result_status = subprocess.run(
+                ["verdi", "status"], capture_output=True, text=True, check=False
+            )
+            print(result_status.stdout, result_status.stderr)
+
+            result_daemon = subprocess.run(
                 ["verdi", "daemon", "status"],
                 capture_output=True,
                 text=True,
                 check=False,
             )
-            print(result.stdout, result.stderr)
+            print(result_daemon.stdout, result_daemon.stderr)
 
     def _clear_status(self):
         with self._status:
@@ -79,7 +84,7 @@ class DaemonControlWidget(ipw.VBox):
 
 class ProcessControlWidget(ipw.VBox):
     def __init__(self):
-        process_list = awb.ProcessListWidget(path_to_root="../../")
+        process_list = awb.ProcessListWidget(path_to_root="../")
         past_days_widget = ipw.IntText(value=7, description="Past days:")
         tr.link((past_days_widget, "value"), (process_list, "past_days"))
 
@@ -115,17 +120,6 @@ class GroupControlWidget(ipw.VBox):
     def __init__(self):
         text = ipw.HTML("I am a Group Control Page")
         super().__init__(children=[text])
-
-
-class StatusControlWidget(ipw.HTML):
-    def __init__(self):
-        print("AiiDA status")
-        print(
-            subprocess.run(
-                ["verdi", "status"], capture_output=True, text=True, check=False
-            ).stdout
-        )
-        super().__init__()
 
 
 class Profile(ipw.HBox):
