@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """AiiDAlab basic widgets."""
 
 from threading import Timer
@@ -104,7 +103,7 @@ class AppStatusInfoWidget(ipw.HTML):
         "and avoid compatibility isssues."
     )
 
-    MESSAGES_UPDATES = {
+    MESSAGES_UPDATES = {  # noqa: RUF012
         AppStatus.CANNOT_REACH_REGISTRY: f'<div title="Unable to reach the registry server ({AIIDALAB_REGISTRY}).">'
         f'<font color="{Theme.COLORS.GRAY}">{Theme.ICONS.APP_UPDATE_AVAILABLE_UNKNOWN} '
         "Cannot reach server.</font></div>",

@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 """Module that contains widgets for managing AiiDAlab applications."""
+
 from subprocess import CalledProcessError
 
 import ipywidgets as ipw
@@ -69,9 +69,9 @@ class VersionSelectorWidget(ipw.VBox):
         )
 
         super().__init__(
+            *args,
             children=[self.installed_version, self.version_to_install, self.info],
             layout={"min_width": "300px"},
-            *args,
             **kwargs,
         )
 
@@ -207,7 +207,7 @@ class AppManagerWidget(ipw.VBox):
         self.app.observe(
             self._refresh_prereleases, names=["has_prereleases", "installed_version"]
         )
-        self._refresh_prereleases(change=dict(owner=self.app))  # initialize
+        self._refresh_prereleases(change={"owner": self.app})  # initialize
 
         children = [
             ipw.HBox([self.header_warning]),
