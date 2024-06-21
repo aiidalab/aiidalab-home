@@ -9,7 +9,7 @@ from IPython.display import clear_output
 
 
 class DaemonControlWidget(ipw.VBox):
-    def __init__(self, *args, **kwargs):
+    def __init__(self):
         self._daemon = engine.daemon.get_daemon_client()
         self._status = ipw.Output()
 
@@ -65,7 +65,10 @@ class DaemonControlWidget(ipw.VBox):
         self._clear_status()
         with self._status:
             result = subprocess.run(
-                ["verdi", "daemon", "status"], capture_output=True, text=True, check=False
+                ["verdi", "daemon", "status"],
+                capture_output=True,
+                text=True,
+                check=False,
             )
             print(result.stdout, result.stderr)
 
@@ -118,7 +121,9 @@ class StatusControlWidget(ipw.HTML):
     def __init__(self):
         print("AiiDA status")
         print(
-            subprocess.run(["verdi", "status"], capture_output=True, text=True, check=False).stdout
+            subprocess.run(
+                ["verdi", "status"], capture_output=True, text=True, check=False
+            ).stdout
         )
         super().__init__()
 
@@ -136,4 +141,4 @@ class ProfileControlWidget(ipw.VBox):
     def __init__(self):
         text = ipw.HTML(value="<h3> List of profiles </h3>")
         children = [Profile(p) for p in manage.get_config().profiles]
-        super().__init__(children=children)
+        super().__init__(children=[text, *children])
