@@ -58,24 +58,24 @@ def _workaround_property_lock_issue(func):
 class AiidaLabHome:
     """Class that mananges the appearance of the AiiDAlab home page."""
 
-    def __init__(self):
+    def __init__(self, is_demo_server=False):
         self.config_fn = ".launcher.json"
-        self.output = ipw.Output()
+        self.is_demo_server = is_demo_server
         self._app_widgets = {}
 
     def _create_app_widget(self, name):
         """Create the widget representing the app on the home screen."""
         config = self.read_config()
         app = AiidaLabApp(name, None, AIIDALAB_APPS)
-
-        if name == "home":
-            app_widget = AppWidget(app, allow_move=False, allow_manage=False)
-        else:
-            app_widget = CollapsableAppWidget(app, allow_move=True)
-            app_widget.hidden = name in config["hidden"]
-            app_widget.observe(self._on_app_widget_change_hidden, names=["hidden"])
-
+        app_widget = CollapsableAppWidget(app, allow_move=True)
+        app_widget.hidden = name in config["hidden"]
+        app_widget.observe(self._on_app_widget_change_hidden, names=["hidden"])
         return app_widget
+
+    def _create_home_widget(self):
+        """Create the home app widget."""
+        app = AiidaLabApp("home", None, AIIDALAB_APPS)
+        return AppWidget(app, allow_move=False, allow_manage=False)
 
     def _on_app_widget_change_hidden(self, change):
         """Record whether a app widget is hidden on the home screen in the config file."""
@@ -98,18 +98,31 @@ class AiidaLabHome:
 
     def render(self):
         """Rendering all apps."""
-        self.output.clear_output()
-        apps = self.load_apps()
+        home = self._create_home_widget()
+        display(home)
 
-        with self.output:
-            for name in apps:
-                # Create app widget if it has not been created yet.
-                if name not in self._app_widgets:
-                    self._app_widgets[name] = self._create_app_widget(name)
+        if self.is_demo_server:
+            display(ipw.HTML("<h1>Welcome to the AiiDAlab demo server</h1>"))
+            intro_content = ipw.HTML("""
+<p>
+    This is a demo server for AiiDAlab, a platform for computational science based on the AiiDA framework. The server is running on a virtual machine with limited resources and is intended for demonstration purposes only. The server is reset to its initial state every 24 hours. For more information on AiiDAlab, please visit the <a href="https://www.aiidalab.net" target="_blank">AiiDAlab website</a>.
+</p>
+<h4>Instructions:</h4>
+<ul>
+    <li>To <strong>launch the app</strong>, click the app logo</li>
+    <li>To manage the app, click on the "Manage App" button</li>
+    <li>To view the app's codebase, click on the "URL" button</li>
+</ul>
+            """)
+            intro = ipw.VBox([intro_content])
+            intro.add_class("intro-message")
+            display(intro)
 
-                display(self._app_widgets[name])
-
-        return self.output
+        for name in self.load_apps():
+            # Create app widget if it has not been created yet.
+            if name not in self._app_widgets:
+                self._app_widgets[name] = self._create_app_widget(name)
+            display(self._app_widgets[name])
 
     def load_apps(self):
         """Load apps according to the order defined in the config file."""
@@ -125,7 +138,7 @@ class AiidaLabHome:
         apps.sort(key=lambda x: order.index(x) if x in order else -1)
         config["order"] = apps
         self.write_config(config)
-        return ["home", *apps]
+        return apps
 
     def move_updown(self, name, delta):
         """Move the app up/down on the start page."""
