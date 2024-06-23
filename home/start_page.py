@@ -146,6 +146,7 @@ class AppWidget(ipw.VBox):
         self.app = app
 
         launcher = load_widget(app.name)
+        launcher.layout.flex = "1"
 
         header_items = []
         footer_items = []
@@ -154,7 +155,7 @@ class AppWidget(ipw.VBox):
             app_status_info = AppStatusInfoWidget()
             for trait in ("detached", "compatible", "remote_update_status"):
                 ipw.dlink((app, trait), (app_status_info, trait))
-            app_status_info.layout.margin = "0px 0px 0px 800px"
+            app_status_info.layout.margin = "0px 0px 0px auto"
             header_items.append(app_status_info)
 
             footer_items.append(
@@ -176,7 +177,7 @@ class AppWidget(ipw.VBox):
 
         footer = ipw.HTML(" ".join(footer_items), layout={"width": "initial"})
         footer.layout.margin = (
-            "0px 0px 0px 700px" if allow_manage else "0px 0px 20px 0px"
+            "0px 0px 0px auto" if allow_manage else "0px 0px 20px 0px"
         )
 
         super().__init__(children=[header, body, footer])
