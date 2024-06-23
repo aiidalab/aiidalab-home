@@ -146,7 +146,6 @@ class AppWidget(ipw.VBox):
         self.app = app
 
         launcher = load_widget(app.name)
-        launcher.layout = ipw.Layout(width="900px")
 
         header_items = []
         footer_items = []
