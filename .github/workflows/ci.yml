@@ -8,7 +8,6 @@ on: [push, pull_request]
 jobs:
 
     pre-commit:
-    # Adapted from: https://github.com/CasperWA/voila-optimade-client
 
         runs-on: ubuntu-latest
 
