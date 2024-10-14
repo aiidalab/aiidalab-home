@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 from time import sleep
 
 from selenium.webdriver.common.by import By
@@ -19,4 +18,4 @@ def test_terminal(selenium_driver, final_screenshot):
     selenium.find_element(By.CSS_SELECTOR, ".xterm-helper-textarea").send_keys(
         Keys.ENTER
     )
-    sleep(1)
+    sleep(2)

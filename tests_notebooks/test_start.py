@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import time
 from contextlib import contextmanager
 
@@ -37,7 +36,10 @@ def test_click_help(selenium_driver, final_screenshot):
     with get_new_windows(selenium) as handles:
         selenium.find_element(By.CSS_SELECTOR, ".fa-question").click()
     assert len(handles) == 1
+    # Redirect to https://aiidalab.readthedocs.io
     selenium.switch_to.window(handles.pop())
+    # TODO: Instead of selecting a specific element on the Docs page,
+    # validate the URL.
     #selenium.find_element(By.CSS_SELECTOR, ".mr-md-2").click()
 
 
