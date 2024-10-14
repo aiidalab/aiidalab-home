@@ -28,4 +28,4 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["ARG001"]
+"tests_notebooks/*" = ["ARG001"]

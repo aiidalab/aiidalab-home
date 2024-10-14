@@ -10,7 +10,7 @@ on:
     pull_request:
 
 env:
-    FORCE_COLOR: "1"
+    FORCE_COLOR: '1'
 
 # https://docs.github.com/en/actions/using-jobs/using-concurrency
 concurrency:
@@ -43,7 +43,7 @@ jobs:
             - name: Setup uv
               uses: astral-sh/setup-uv@v3
               with:
-                  version: '0.4.20'
+                  version: 0.4.20
 
             - name: Install package test dependencies
               # Notebook tests happen in the container, here we only need to install

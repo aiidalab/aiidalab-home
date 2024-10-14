@@ -14,8 +14,8 @@ def get_new_windows(selenium, timeout=2):
     handles.update(set(selenium.window_handles).difference(wh_before))
 
 
-def test_click_appstore(selenium, url, final_screenshot):
-    selenium.get(url("apps/apps/home/start.ipynb"))
+def test_click_appstore(selenium_driver, final_screenshot):
+    selenium = selenium_driver("start.ipynb")
     with get_new_windows(selenium) as handles:
         selenium.find_element(By.CSS_SELECTOR, ".fa-puzzle-piece").click()
     assert len(handles) == 1
@@ -31,8 +31,8 @@ def test_click_appstore(selenium, url, final_screenshot):
     time.sleep(5)
 
 
-def test_click_help(selenium, url, final_screenshot):
-    selenium.get(url("apps/apps/home/start.ipynb"))
+def test_click_help(selenium_driver, final_screenshot):
+    selenium = selenium_driver("start.ipynb")
     selenium.set_window_size(1200, 941)
     with get_new_windows(selenium) as handles:
         selenium.find_element(By.CSS_SELECTOR, ".fa-question").click()
@@ -41,8 +41,8 @@ def test_click_help(selenium, url, final_screenshot):
     selenium.find_element(By.CSS_SELECTOR, ".mr-md-2").click()
 
 
-def test_click_filemanager(selenium, url, final_screenshot):
-    selenium.get(url("apps/apps/home/start.ipynb"))
+def test_click_filemanager(selenium_driver, final_screenshot):
+    selenium = selenium_driver("start.ipynb")
     selenium.set_window_size(1200, 941)
     with get_new_windows(selenium) as handles:
         selenium.find_element(By.CSS_SELECTOR, ".fa-file-text-o").click()
