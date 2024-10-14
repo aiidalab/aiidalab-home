@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from time import sleep
 from urllib.parse import urljoin
 
 import pytest
@@ -95,6 +96,7 @@ def selenium_driver(selenium, notebook_service):
         WebDriverWait(selenium, 240).until(
             ec.invisibility_of_element((By.ID, "appmode-busy"))
         )
+        sleep(5)
 
         return selenium
 
