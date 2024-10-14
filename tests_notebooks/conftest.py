@@ -75,9 +75,11 @@ def notebook_service(docker_ip, docker_services, aiidalab_exec):
 
 @pytest.fixture(scope="function")
 def selenium_driver(selenium, notebook_service):
-    def _selenium_driver(nb_path):
+    def _selenium_driver(nb_path, url_params):
         url, token = notebook_service
         url_with_token = urljoin(url, f"apps/apps/home/{nb_path}?token={token}")
+        for key, value in url_params.items():
+            url_with_token += f"&{key}={value}"
         selenium.get(f"{url_with_token}")
         # By default, let's allow selenium functions to retry for 60s
         # till a given element is loaded, see:
