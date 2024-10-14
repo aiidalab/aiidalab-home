@@ -40,7 +40,7 @@ def test_click_help(selenium_driver, final_screenshot):
     selenium.switch_to.window(handles.pop())
     # TODO: Instead of selecting a specific element on the Docs page,
     # validate the URL.
-    #selenium.find_element(By.CSS_SELECTOR, ".mr-md-2").click()
+    # selenium.find_element(By.CSS_SELECTOR, ".mr-md-2").click()
 
 
 def test_click_filemanager(selenium_driver, final_screenshot):
