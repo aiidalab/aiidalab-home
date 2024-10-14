@@ -20,6 +20,7 @@ def test_click_appstore(selenium_driver, final_screenshot):
     assert len(handles) == 1
     selenium.switch_to.window(handles.pop())
     time.sleep(5)
+    selenium.set_window_size(1200, 941)
     dropdown = selenium.find_element(
         By.XPATH,
         "//div[@id='notebook-container']/div[5]/div[2]/div[2]/div/div[3]/div/div[2]/div/select",
