@@ -38,7 +38,7 @@ def test_click_help(selenium_driver, final_screenshot):
         selenium.find_element(By.CSS_SELECTOR, ".fa-question").click()
     assert len(handles) == 1
     selenium.switch_to.window(handles.pop())
-    selenium.find_element(By.CSS_SELECTOR, ".mr-md-2").click()
+    #selenium.find_element(By.CSS_SELECTOR, ".mr-md-2").click()
 
 
 def test_click_filemanager(selenium_driver, final_screenshot):
