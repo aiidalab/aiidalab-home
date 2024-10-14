@@ -5,7 +5,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 
 
-def test_terminal(selenium, url):
+def test_terminal(selenium, url, final_screenshot):
     selenium.get(url("apps/apps/home/start.ipynb"))
     selenium.set_window_size(1575, 907)
     selenium.find_element(By.CSS_SELECTOR, ".fa-terminal").click()
@@ -20,4 +20,3 @@ def test_terminal(selenium, url):
         Keys.ENTER
     )
     sleep(1)
-    selenium.get_screenshot_as_file("screenshots/aiidalab-terminal.png")
