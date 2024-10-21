@@ -20,7 +20,7 @@ def test_click_appstore(selenium_driver, final_screenshot):
     assert len(handles) == 1
     selenium.switch_to.window(handles.pop())
     time.sleep(5)
-    selenium.set_window_size(950, 1200)
+    selenium.set_window_size(1000, 1100)
     dropdown = selenium.find_element(
         By.XPATH,
         "//div[@id='notebook-container']/div[5]/div[2]/div[2]/div/div[3]/div/div[2]/div/select",
@@ -46,7 +46,7 @@ def test_click_help(selenium_driver, final_screenshot):
 
 def test_click_filemanager(selenium_driver, final_screenshot):
     selenium = selenium_driver("start.ipynb")
-    selenium.set_window_size(1200, 941)
+    selenium.set_window_size(1000, 941)
     with get_new_windows(selenium) as handles:
         selenium.find_element(By.CSS_SELECTOR, ".fa-file-text-o").click()
     assert len(handles) == 1
