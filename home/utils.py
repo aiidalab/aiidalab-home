@@ -32,7 +32,7 @@ def load_start_py(name):
             )
         except TypeError:
             return mod.get_start_widget(appbase=appbase, jupbase=jupbase)
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         return ipw.HTML(f"<pre>{sys.exc_info()}</pre>")
 
 
@@ -51,7 +51,7 @@ def load_start_md(name):
         html = html.replace("<h3", "<h4")
         return ipw.HTML(html)
 
-    except Exception as exc:  # pylint: disable=broad-except
+    except Exception as exc:
         return ipw.HTML(f"Could not load start.md: {exc!s}")
 
 
