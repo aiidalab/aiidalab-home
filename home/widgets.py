@@ -142,7 +142,7 @@ class Spinner(ipw.HTML):
         super().__init__()
 
     @traitlets.default("enabled")
-    def _default_enabled(self):  # pylint: disable=no-self-use
+    def _default_enabled(self):
         return False
 
     @traitlets.observe("enabled")
