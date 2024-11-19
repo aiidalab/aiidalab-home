@@ -7,7 +7,7 @@ import traitlets
 from aiidalab.app import AppRemoteUpdateStatus as AppStatus
 from aiidalab.app import AppVersion
 from jinja2 import Template
-from packaging.version import parse
+from packaging.version import InvalidVersion, parse
 
 from home.utils import load_logo
 from home.widgets import LogOutputWidget, Spinner, StatusHTML
@@ -258,11 +258,14 @@ class AppManagerWidget(ipw.VBox):
         installed_version = app.installed_version
 
         has_prereleases = app.has_prereleases
-        prerelease_installed = (
-            parse(installed_version).is_prerelease
-            if isinstance(installed_version, str)
-            else False
-        )
+        prerelease_installed = False
+        if isinstance(installed_version, str):
+            try:
+                parsed_version = parse(installed_version)
+            except InvalidVersion:
+                pass
+            else:
+                prerelease_installed = parsed_version.is_prerelease
 
         with self.hold_trait_notifications():
             # The checkbox can only be enabled when the app has prereleases,
