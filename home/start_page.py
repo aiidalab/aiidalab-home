@@ -9,7 +9,6 @@ import ipywidgets as ipw
 import traitlets
 from aiidalab.app import AiidaLabApp
 from aiidalab.config import AIIDALAB_APPS
-from IPython.display import display
 
 from home.utils import load_widget
 from home.widgets import AppStatusInfoWidget
@@ -60,7 +59,7 @@ class AiidaLabHome:
 
     def __init__(self):
         self.config_fn = ".launcher.json"
-        self.output = ipw.Output()
+        self.output = ipw.VBox()
         self._app_widgets = {}
 
     def _create_app_widget(self, name):
@@ -98,17 +97,17 @@ class AiidaLabHome:
 
     def render(self):
         """Rendering all apps."""
-        self.output.clear_output()
+
+        displayed_apps = []
         apps = self.load_apps()
 
-        with self.output:
-            for name in apps:
-                # Create app widget if it has not been created yet.
-                if name not in self._app_widgets:
-                    self._app_widgets[name] = self._create_app_widget(name)
+        for name in apps:
+            # Create app widget if it has not been created yet.
+            if name not in self._app_widgets:
+                self._app_widgets[name] = self._create_app_widget(name)
 
-                display(self._app_widgets[name])
-
+            displayed_apps.append(self._app_widgets[name])
+        self.output.children = displayed_apps
         return self.output
 
     def load_apps(self):
@@ -186,24 +185,17 @@ class AppWidget(ipw.VBox):
 class CollapsableAppWidget(ipw.Accordion):
     """Widget that represents a collapsable app as part of the home page."""
 
-    hidden = traitlets.Bool()
+    hidden = traitlets.Bool(None, allow_none=True)
 
     def __init__(self, app, **kwargs):
         self.app = app
         app_widget = AppWidget(app, **kwargs)
         super().__init__(children=[app_widget])
         self.set_title(0, app.title)
-        # Need to observe all names here due to unidentified issue:
-        self.observe(
-            self._observe_accordion_selected_index
-        )  # , names=['selected_index'])
 
-    @_workaround_property_lock_issue
+    @traitlets.observe("selected_index")
     def _observe_accordion_selected_index(self, change):
-        if (
-            change["name"] == "selected_index"
-        ):  # Observing all names due to unidentified issue.
-            self.hidden = change["new"] is None
+        self.hidden = change["new"] is None
 
     @traitlets.observe("hidden")
     def _observe_hidden(self, change):
