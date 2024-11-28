@@ -3,11 +3,11 @@
 import logging
 
 import ipywidgets as ipw
-from aiidalab.app import AiidaLabApp
-from aiidalab.utils import load_app_registry_index
 from IPython.display import display
 from jinja2 import Template
 
+from aiidalab.app import AiidaLabApp
+from aiidalab.utils import load_app_registry_index
 from home.app_manager import AppManagerWidget
 
 logger = logging.getLogger(__name__)

@@ -5,8 +5,9 @@ from importlib.machinery import SourceFileLoader
 from os import path
 
 import ipywidgets as ipw
-from aiidalab.config import AIIDALAB_APPS
 from markdown import markdown
+
+from aiidalab.config import AIIDALAB_APPS
 
 
 def load_widget(name):

@@ -7,10 +7,10 @@ from os import path
 
 import ipywidgets as ipw
 import traitlets
-from aiidalab.app import AiidaLabApp
-from aiidalab.config import AIIDALAB_APPS
 from IPython.display import display
 
+from aiidalab.app import AiidaLabApp
+from aiidalab.config import AIIDALAB_APPS
 from home.utils import load_widget
 from home.widgets import AppStatusInfoWidget
 
