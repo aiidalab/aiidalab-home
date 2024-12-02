@@ -1,7 +1,6 @@
 """Module to generate AiiDAlab home page."""
 
 import json
-from functools import wraps
 from glob import glob
 from os import path
 
@@ -27,31 +26,6 @@ def create_app_widget_move_buttons(name):
     app_widget_move_buttons.layout.margin = "50px 0px 0px 0px"
 
     return app_widget_move_buttons
-
-
-def _workaround_property_lock_issue(func):
-    """Work-around for issue with the ipw.Accordion widget.
-
-    The widget does not report changes to the .selected_index trait when displayed
-    within a custom ipw.Output instance. However, the change is somewhat cryptic reported
-    by a change to the private '_property_lock' trait. We observe changes to that trait
-    and convert the change argument into a form that is more like the one expected by
-    downstream handlers.
-    """
-
-    @wraps(func)
-    def _inner(self, change):
-        if change["name"] == "_property_lock":
-            if "selected_index" in change["old"]:
-                fixed_change = change.copy()
-                fixed_change["name"] = "selected_index"
-                fixed_change["new"] = change["old"]["selected_index"]
-                del fixed_change["old"]
-                return func(self, fixed_change)
-
-        return func(self, change)
-
-    return _inner
 
 
 class AiidaLabHome:
