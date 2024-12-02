@@ -4,7 +4,6 @@ from threading import Timer
 
 import ipywidgets as ipw
 import traitlets
-
 from aiidalab.app import AppRemoteUpdateStatus as AppStatus
 from aiidalab.config import AIIDALAB_REGISTRY
 
