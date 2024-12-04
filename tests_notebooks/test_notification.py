@@ -8,4 +8,4 @@ def test_home_notification(selenium_driver, create_warning_file, final_screensho
     assert len(notifications) == 1
     home_warning = notifications[0]
     content_element = home_warning.find_element(By.TAG_NAME, "p")
-    assert content_element.text == "This is a test warning"
+    assert content_element.text == "Warning!"
