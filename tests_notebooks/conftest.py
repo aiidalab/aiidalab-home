@@ -43,7 +43,7 @@ def docker_compose(docker_services):
 @pytest.fixture(scope="session")
 def aiidalab_exec(docker_compose, nb_user):
     def execute(command, user=None, **kwargs):
-        workdir = "/home/{nb_user}/apps/home"
+        workdir = f"/home/{nb_user}/apps/home"
         if user is None:
             user = nb_user
         command = f"exec --workdir {workdir} -T --user={user} aiidalab {command}"
@@ -63,7 +63,9 @@ def create_warning_file(nb_user, aiidalab_exec):
     aiidalab_exec(
         f"mkdir -p {config_folder} && chmod a+xr {config_folder}", user="root"
     )
-    aiidalab_exec("echo 'Warning!' > {config_folder}/home_app_warning.md", user=nb_user)
+    aiidalab_exec(
+        f"bash -c 'echo Warning! > {config_folder}/home_app_warning.md'", user=nb_user
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)
