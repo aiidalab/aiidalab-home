@@ -61,7 +61,7 @@ def nb_user():
 def create_warning_file(nb_user, aiidalab_exec):
     config_folder = f"/home/{nb_user}/.aiidalab"
     aiidalab_exec(
-        f"mkdir -p {config_folder} && chmod a+xr {config_folder}", user="root"
+        f"bash -c 'mkdir -p {config_folder} && chmod a+xr {config_folder}'", user="root"
     )
     aiidalab_exec(
         f"bash -c 'echo Warning! > {config_folder}/home_app_warning.md'", user=nb_user
