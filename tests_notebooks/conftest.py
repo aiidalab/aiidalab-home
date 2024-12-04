@@ -41,35 +41,37 @@ def docker_compose(docker_services):
 
 
 @pytest.fixture(scope="session")
-def aiidalab_exec(docker_compose):
+def aiidalab_exec(docker_compose, nb_user):
     def execute(command, user=None, **kwargs):
-        workdir = "/home/jovyan/apps/home"
-        if user:
-            command = f"exec --workdir {workdir} -T --user={user} aiidalab {command}"
-        else:
-            command = f"exec --workdir {workdir} -T aiidalab {command}"
-
+        workdir = "/home/{nb_user}/apps/home"
+        if user is None:
+            user = nb_user
+        command = f"exec --workdir {workdir} -T --user={user} aiidalab {command}"
         return docker_compose.execute(command, **kwargs)
 
     return execute
 
 
+@pytest.fixture(scope="session")
+def nb_user():
+    return "jovyan"
+
+
 @pytest.fixture
-def create_warning_file(aiidalab_exec):
-    aiidalab_exec("mkdir -p /home/jovyan/.aiidalab", user="root")
-    aiidalab_exec("chmod a+xr /home/jovyan/.aiidalab", user="root")
+def create_warning_file(nb_user, aiidalab_exec):
+    config_folder = f"/home/{nb_user}/.aiidalab"
     aiidalab_exec(
-        "echo 'This is a test warning' > /home/jovyan/.aiidalab/home_app_warning.md",
-        user="jovyan",
+        f"mkdir -p {config_folder} && chmod a+xr {config_folder}", user="root"
     )
+    aiidalab_exec("echo 'Warning!' > {config_folder}/home_app_warning.md", user=nb_user)
 
 
 @pytest.fixture(scope="session", autouse=True)
-def notebook_service(docker_ip, docker_services, aiidalab_exec):
+def notebook_service(docker_ip, docker_services, aiidalab_exec, nb_user):
     """Ensure that HTTP service is up and responsive."""
     # Directory ~/apps/home/ is mounted by docker,
     # make it writeable for jovyan user, needed for `pip install`
-    aiidalab_exec("chmod -R a+rw /home/jovyan/apps/home", user="root")
+    aiidalab_exec(f"chmod -R a+rw /home/{nb_user}/apps/home", user="root")
 
     aiidalab_exec("pip install --no-cache-dir .")
 
