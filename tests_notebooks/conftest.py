@@ -56,8 +56,11 @@ def aiidalab_exec(docker_compose):
 
 @pytest.fixture
 def create_warning_file(aiidalab_exec):
+    aiidalab_exec("mkdir -p /home/jovyan/.aiidalab", user="root")
+    aiidalab_exec("chmod a+xr /home/jovyan/.aiidalab", user="root")
     aiidalab_exec(
-        "mkdir -p /home/jovyan/.aiidalab && echo 'This is a test warning' > /home/jovyan/.aiidalab/home_app_warning.md"
+        "echo 'This is a test warning' > /home/jovyan/.aiidalab/home_app_warning.md",
+        user="jovyan",
     )
 
 
