@@ -42,6 +42,8 @@ def docker_compose(docker_services):
 
 @pytest.fixture(scope="session")
 def aiidalab_exec(docker_compose, nb_user):
+    """Execute command inside the AiiDAlab test container"""
+
     def execute(command, user=None, **kwargs):
         workdir = f"/home/{nb_user}/apps/home"
         if user is None:
@@ -60,10 +62,7 @@ def nb_user():
 @pytest.fixture
 def create_warning_file(nb_user, aiidalab_exec):
     config_folder = f"/home/{nb_user}/.aiidalab"
-    # aiidalab_exec(
-    #    f"bash -c 'mkdir -p {config_folder} && chmod a+xr {config_folder}'", user="root"
-    # )
-    aiidalab_exec(f"mkdir -p {config_folder}", user=nb_user)
+    aiidalab_exec(f"mkdir -p {config_folder}")
     aiidalab_exec(f"bash -c 'echo Warning! > {config_folder}/home_app_warning.md'")
 
 
@@ -88,6 +87,12 @@ def notebook_service(docker_ip, docker_services, aiidalab_exec, nb_user):
 
 @pytest.fixture(scope="function")
 def selenium_driver(selenium, notebook_service):
+    """This is the main fixture to be used in tests.
+
+    We're already guaranteed that the container is up and responding to HTTP requests.
+    (via `notebook_service` fixture).
+    """
+
     def _selenium_driver(nb_path, url_params=None):
         url, token = notebook_service
         url_with_token = urljoin(url, f"apps/apps/home/{nb_path}?token={token}")
@@ -122,8 +127,9 @@ def selenium_driver(selenium, notebook_service):
 @pytest.fixture
 def final_screenshot(request, screenshot_dir, selenium):
     """Take screenshot at the end of the test.
+
     Screenshot name is generated from the test function name
-    by stripping the 'test_' prefix
+    by stripping the 'test_' prefix.
     """
     screenshot_name = f"{request.function.__name__[5:]}.png"
     screenshot_path = Path.joinpath(screenshot_dir, screenshot_name)
