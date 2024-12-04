@@ -54,6 +54,13 @@ def aiidalab_exec(docker_compose):
     return execute
 
 
+@pytest.fixture
+def create_warning_file(aiidalab_exec):
+    aiidalab_exec(
+        "mkdir -p /home/jovyan/.aiidalab && echo 'This is a test warning' > /home/jovyan/.aiidalab/home_app_warning.md"
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def notebook_service(docker_ip, docker_services, aiidalab_exec):
     """Ensure that HTTP service is up and responsive."""

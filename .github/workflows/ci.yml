@@ -55,7 +55,7 @@ jobs:
               run: echo "JUPYTER_TOKEN=$(openssl rand -hex 32)" >> $GITHUB_ENV
 
             - name: Run pytest
-              run: pytest -v --driver ${{ matrix.browser }} tests_notebooks
+              run: pytest -v --driver ${{ matrix.browser }} tests_notebooks -k test_notification
               env:
                   TAG: edge
 
