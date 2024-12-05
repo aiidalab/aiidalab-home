@@ -41,25 +41,39 @@ def docker_compose(docker_services):
 
 
 @pytest.fixture(scope="session")
-def aiidalab_exec(docker_compose):
-    def execute(command, user=None, **kwargs):
-        workdir = "/home/jovyan/apps/home"
-        if user:
-            command = f"exec --workdir {workdir} -T --user={user} aiidalab {command}"
-        else:
-            command = f"exec --workdir {workdir} -T aiidalab {command}"
+def aiidalab_exec(docker_compose, nb_user):
+    """Execute command inside the AiiDAlab test container"""
 
+    def execute(command, user=None, **kwargs):
+        workdir = f"/home/{nb_user}/apps/home"
+        if user is None:
+            user = nb_user
+        command = (
+            f"exec --workdir {workdir} -T --user={user} aiidalab bash -c '{command}'"
+        )
         return docker_compose.execute(command, **kwargs)
 
     return execute
 
 
+@pytest.fixture(scope="session")
+def nb_user():
+    return "jovyan"
+
+
+@pytest.fixture
+def create_warning_file(nb_user, aiidalab_exec):
+    config_folder = f"/home/{nb_user}/.aiidalab"
+    aiidalab_exec(f"mkdir -p {config_folder}")
+    aiidalab_exec(f"echo Warning! > {config_folder}/home_app_warning.md")
+
+
 @pytest.fixture(scope="session", autouse=True)
-def notebook_service(docker_ip, docker_services, aiidalab_exec):
+def notebook_service(docker_ip, docker_services, aiidalab_exec, nb_user):
     """Ensure that HTTP service is up and responsive."""
     # Directory ~/apps/home/ is mounted by docker,
     # make it writeable for jovyan user, needed for `pip install`
-    aiidalab_exec("chmod -R a+rw /home/jovyan/apps/home", user="root")
+    aiidalab_exec(f"chmod -R a+rw /home/{nb_user}/apps/home", user="root")
 
     aiidalab_exec("pip install --no-cache-dir .")
 
@@ -75,6 +89,12 @@ def notebook_service(docker_ip, docker_services, aiidalab_exec):
 
 @pytest.fixture(scope="function")
 def selenium_driver(selenium, notebook_service):
+    """This is the main fixture to be used in tests.
+
+    We're already guaranteed that the container is up and responding to HTTP requests.
+    (via `notebook_service` fixture).
+    """
+
     def _selenium_driver(nb_path, url_params=None):
         url, token = notebook_service
         url_with_token = urljoin(url, f"apps/apps/home/{nb_path}?token={token}")
@@ -109,8 +129,9 @@ def selenium_driver(selenium, notebook_service):
 @pytest.fixture
 def final_screenshot(request, screenshot_dir, selenium):
     """Take screenshot at the end of the test.
+
     Screenshot name is generated from the test function name
-    by stripping the 'test_' prefix
+    by stripping the 'test_' prefix.
     """
     screenshot_name = f"{request.function.__name__[5:]}.png"
     screenshot_path = Path.joinpath(screenshot_dir, screenshot_name)

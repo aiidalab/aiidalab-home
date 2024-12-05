@@ -3,6 +3,7 @@
 import json
 from glob import glob
 from os import path
+from pathlib import Path
 
 import ipywidgets as ipw
 import traitlets
@@ -29,7 +30,7 @@ def create_app_widget_move_buttons(name):
 
 
 class AiidaLabHome:
-    """Class that mananges the appearance of the AiiDAlab home page."""
+    """Class that manages the appearance of the AiiDAlab home page."""
 
     def __init__(self):
         self.config_fn = ".launcher.json"
@@ -40,15 +41,15 @@ class AiidaLabHome:
         """Create the widget representing the app on the home screen."""
         config = self.read_config()
         app = AiidaLabApp(name, None, AIIDALAB_APPS)
-
-        if name == "home":
-            app_widget = AppWidget(app, allow_move=False, allow_manage=False)
-        else:
-            app_widget = CollapsableAppWidget(app, allow_move=True)
-            app_widget.hidden = name in config["hidden"]
-            app_widget.observe(self._on_app_widget_change_hidden, names=["hidden"])
-
+        app_widget = CollapsableAppWidget(app, allow_move=True)
+        app_widget.hidden = name in config["hidden"]
+        app_widget.observe(self._on_app_widget_change_hidden, names=["hidden"])
         return app_widget
+
+    def _create_home_widget(self):
+        """Create the home app widget."""
+        app = AiidaLabApp("home", None, AIIDALAB_APPS)
+        return AppWidget(app, allow_move=False, allow_manage=False)
 
     def _on_app_widget_change_hidden(self, change):
         """Record whether a app widget is hidden on the home screen in the config file."""
@@ -72,7 +73,17 @@ class AiidaLabHome:
     def render(self):
         """Rendering all apps."""
 
-        displayed_apps = []
+        home = self._create_home_widget()
+        children = [home]
+
+        config_dir = Path.home() / ".aiidalab"
+        warning_file = config_dir / "home_app_warning.md"
+
+        if warning_file.exists():
+            content = warning_file.read_text()
+            notification = self._create_notification(content)
+            children.append(notification)
+
         apps = self.load_apps()
 
         for name in apps:
@@ -80,8 +91,10 @@ class AiidaLabHome:
             if name not in self._app_widgets:
                 self._app_widgets[name] = self._create_app_widget(name)
 
-            displayed_apps.append(self._app_widgets[name])
-        self.output.children = displayed_apps
+            children.append(self._app_widgets[name])
+
+        self.output.children = children
+
         return self.output
 
     def load_apps(self):
@@ -98,7 +111,7 @@ class AiidaLabHome:
         apps.sort(key=lambda x: order.index(x) if x in order else -1)
         config["order"] = apps
         self.write_config(config)
-        return ["home", *apps]
+        return apps
 
     def move_updown(self, name, delta):
         """Move the app up/down on the start page."""
@@ -111,6 +124,19 @@ class AiidaLabHome:
         config["order"] = order
         self.write_config(config)
 
+    def _create_notification(self, content):
+        from IPython.display import Markdown, display
+        from jinja2 import Environment
+
+        env = Environment()
+        notification = env.from_string(content).render()
+        output = ipw.Output()
+        notification_widget = ipw.VBox(children=[output])
+        notification_widget.add_class("home-notification")
+        with output:
+            display(Markdown(notification))
+        return notification_widget
+
 
 class AppWidget(ipw.VBox):
     """Widget that represents an app as part of the home page."""
@@ -119,7 +145,7 @@ class AppWidget(ipw.VBox):
         self.app = app
 
         launcher = load_widget(app.name)
-        launcher.layout = ipw.Layout(width="900px")
+        launcher.layout.flex = "1"  # fill available space
 
         header_items = []
         footer_items = []
@@ -128,7 +154,7 @@ class AppWidget(ipw.VBox):
             app_status_info = AppStatusInfoWidget()
             for trait in ("detached", "compatible", "remote_update_status"):
                 ipw.dlink((app, trait), (app_status_info, trait))
-            app_status_info.layout.margin = "0px 0px 0px 800px"
+            app_status_info.layout.margin = "0px 0px 0px auto"
             header_items.append(app_status_info)
 
             footer_items.append(
@@ -150,7 +176,7 @@ class AppWidget(ipw.VBox):
 
         footer = ipw.HTML(" ".join(footer_items), layout={"width": "initial"})
         footer.layout.margin = (
-            "0px 0px 0px 700px" if allow_manage else "0px 0px 20px 0px"
+            "0px 0px 0px auto" if allow_manage else "0px 0px 20px 0px"
         )
 
         super().__init__(children=[header, body, footer])
