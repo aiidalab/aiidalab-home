@@ -115,9 +115,7 @@ def create_paginated_table(df):
         render_table_with_filters()
 
     def on_checkbox_change(change):
-        full_label = change.owner.full_label
-        is_hidden = change.new
-        update_code_visibility(full_label, is_hidden)
+        update_code_visibility(change.owner.full_label, change.new)
         if show_active.value:
             render_table_with_filters()
 
