@@ -104,7 +104,10 @@ def render_table(df, page, on_checkbox_change):
 def create_paginated_table(df):
     """Create a paginated table with interactive controls."""
 
-    def on_page_change(_):
+    current_page = ipw.IntText(value=1)
+
+    def on_page_change(button):
+        current_page.value = int(button.description)
         render_table_with_filters()
 
     def on_show_active(_):
@@ -136,6 +139,19 @@ def create_paginated_table(df):
         for code in orm.Code.collection.all():
             full_label = f"{code.label}@{code.computer.label}"
             update_code_visibility(full_label, False)
+
+    def generate_page_buttons(total_pages):
+        def create_page_button(page_num):
+            button = ipw.Button(
+                description=str(page_num),
+                button_style="primary" if page_num == current_page.value else "",
+                layout=ipw.Layout(width="40px", height="36px"),
+                page_number=page_num,
+            )
+            button.on_click(on_page_change)
+            return button
+
+        return [create_page_button(i) for i in range(1, total_pages + 1)]
 
     def render_table_with_filters():
         """Render the table with current filters applied."""
@@ -170,20 +186,9 @@ def create_paginated_table(df):
             table_output.clear_output(wait=True)
             display(render_table(visible_df, page, on_checkbox_change))
 
-    table_output = ipw.Output()
+        pagination.children = generate_page_buttons(total_pages)
 
-    total_pages = (len(df) + CONFIG["rows_per_page"] - 1) // CONFIG["rows_per_page"]
-    current_page = ipw.BoundedIntText(
-        value=1,
-        min=1,
-        max=total_pages,
-        step=1,
-        description="Page:",
-    )
-    current_page.observe(
-        on_page_change,
-        "value",
-    )
+    table_output = ipw.Output()
 
     show_active = ipw.Checkbox(
         value=False,
@@ -211,22 +216,22 @@ def create_paginated_table(df):
         "value",
     )
 
+    filters = ipw.HBox(
+        children=[
+            search_box,
+            show_active,
+            show_all_button,
+        ],
+    )
+
+    pagination = ipw.HBox(layout=ipw.Layout(justify_content="center"))
+
     render_table_with_filters()
 
     return ipw.VBox(
         children=[
-            ipw.HBox(
-                children=[
-                    current_page,
-                    show_active,
-                ],
-            ),
-            ipw.HBox(
-                children=[
-                    search_box,
-                    show_all_button,
-                ],
-            ),
+            filters,
             table_output,
+            pagination,
         ],
     )
