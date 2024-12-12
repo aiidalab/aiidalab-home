@@ -176,19 +176,20 @@ def create_paginated_table(data: list[dict]):
 
     def render_table_with_filters():
         """Render the table with current filters applied."""
-        visible_data = data[:]
-        visible_data = filter_data(visible_data, show_active.value, search_box.value)
+        visible_data = filter_data(data, show_active.value, search_box.value)
 
-        total_pages = (len(visible_data) + CONFIG["rows_per_page"] - 1) // CONFIG[
-            "rows_per_page"
-        ]
+        rpg = CONFIG["rows_per_page"]
+        total_pages = (len(visible_data) + rpg - 1) // rpg
         current_page.max = max(total_pages, 1)
-        page = min(current_page.value, total_pages)
-        current_page.value = page
+
+        if total_pages == 0:
+            current_page.value = 1
+        else:
+            current_page.value = min(current_page.value, total_pages)
 
         with table_output:
             table_output.clear_output(wait=True)
-            display(render_table(visible_data, page, on_checkbox_change))
+            display(render_table(visible_data, current_page.value, on_checkbox_change))
 
         pagination.children = generate_page_buttons(total_pages)
 
