@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import ipywidgets as ipw
-import pandas as pd
 from aiida import orm
+from aiida.common.exceptions import NotExistent
 from IPython.display import display
 
 CONFIG = {
@@ -17,19 +17,16 @@ CONFIG = {
 
 
 def fetch_code_data():
-    """Fetch AiiDA code instances and format them into a DataFrame."""
-    codes = orm.Code.collection.all()
-    data = []
-    for code in codes:
-        computer = code.computer
-        data.append(
-            {
-                "Full Label": f"{code.label}@{computer.label}",
-                "Executable Path": code.get_executable(),
-                "Hide": code.is_hidden,
-            }
-        )
-    return pd.DataFrame(data)
+    """Fetch AiiDA code instances and format them into a list of dictionaries."""
+    codes: list[orm.Code] = orm.Code.collection.all()
+    return [
+        {
+            "Full Label": f"{code.label}@{code.computer.label}",
+            "Executable Path": code.get_executable().as_posix(),
+            "Hide": code.is_hidden,
+        }
+        for code in codes
+    ]
 
 
 def create_header():
@@ -88,20 +85,24 @@ def create_row(row, on_checkbox_change):
     return table_row
 
 
-def render_table(df, page, on_checkbox_change):
-    """Render the table for the specified page."""
+def get_page_data(data, page):
     start_idx = (page - 1) * CONFIG["rows_per_page"]
     end_idx = start_idx + CONFIG["rows_per_page"]
-    page_df = df.iloc[start_idx:end_idx]
+    return data[start_idx:end_idx]
+
+
+def render_table(data, page, on_checkbox_change):
+    """Render the table for the specified page."""
+    page_data = get_page_data(data, page)
     header = create_header()
-    rows = [create_row(row, on_checkbox_change) for _, row in page_df.iterrows()]
+    rows = [create_row(row, on_checkbox_change) for row in page_data]
     return ipw.VBox(
         children=[header, *rows],
         layout=ipw.Layout(width="100%"),
     )
 
 
-def create_paginated_table(df):
+def create_paginated_table(data: list[dict]):
     """Create a paginated table with interactive controls."""
 
     current_page = ipw.IntText(value=1)
@@ -127,12 +128,14 @@ def create_paginated_table(df):
 
     def update_code_visibility(full_label, is_hidden):
         """Update the visibility of a `Code` node."""
+        code_row = next(filter(lambda row: row["Full Label"] == full_label, data))
         try:
             code = orm.load_code(full_label)
             code.is_hidden = is_hidden
-            df.loc[df["Full Label"] == full_label, "Hide"] = is_hidden
-        except Exception:
-            df.drop(df[df["Full Label"] == full_label].index, inplace=True)
+            code_row["Hide"] = is_hidden
+        except NotExistent:
+            row_index = data.index(code_row)
+            data.pop(row_index)
             render_table_with_filters()
 
     def unhide_all_codes():
@@ -153,29 +156,30 @@ def create_paginated_table(df):
 
         return [create_page_button(i) for i in range(1, total_pages + 1)]
 
-    def render_table_with_filters():
-        """Render the table with current filters applied."""
-        visible_df = df.copy()
+    def filter_data(data, show_active, query):
+        """Filter the data based on active status and search query."""
+        filtered = data[:]
 
-        if show_active.value:
-            visible_df = visible_df[~visible_df["Hide"]]
+        if show_active:
+            filtered = [row for row in data if not row["Hide"]]
 
-        query = search_box.value.strip().lower()
         if query:
-            visible_df = visible_df[
-                visible_df["Full Label"]
-                .astype(str)
-                .str.lower()
-                .str.contains(query, na=False)
-                | visible_df["Executable Path"]
-                .astype(str)
-                .str.lower()
-                .str.contains(query, na=False)
+            query = query.strip().lower()
+            filtered = [
+                row
+                for row in data
+                if query in row["Full Label"].lower()
+                or query in row["Executable Path"].lower()
             ]
 
-        visible_df.reset_index(drop=True, inplace=True)
+        return filtered
 
-        total_pages = (len(visible_df) + CONFIG["rows_per_page"] - 1) // CONFIG[
+    def render_table_with_filters():
+        """Render the table with current filters applied."""
+        visible_data = data[:]
+        visible_data = filter_data(visible_data, show_active.value, search_box.value)
+
+        total_pages = (len(visible_data) + CONFIG["rows_per_page"] - 1) // CONFIG[
             "rows_per_page"
         ]
         current_page.max = max(total_pages, 1)
@@ -184,7 +188,7 @@ def create_paginated_table(df):
 
         with table_output:
             table_output.clear_output(wait=True)
-            display(render_table(visible_df, page, on_checkbox_change))
+            display(render_table(visible_data, page, on_checkbox_change))
 
         pagination.children = generate_page_buttons(total_pages)
 
