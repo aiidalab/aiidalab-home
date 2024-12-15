@@ -125,16 +125,12 @@ class AiidaLabHome:
         self.write_config(config)
 
     def _create_notification(self, content):
-        from IPython.display import Markdown, display
-        from jinja2 import Environment
+        from markdown import Markdown
 
-        env = Environment()
-        notification = env.from_string(content).render()
-        output = ipw.Output()
-        notification_widget = ipw.VBox(children=[output])
+        md = Markdown()
+        html = md.convert(content)
+        notification_widget = ipw.HTML(html)
         notification_widget.add_class("home-notification")
-        with output:
-            display(Markdown(notification))
         return notification_widget
 
 
