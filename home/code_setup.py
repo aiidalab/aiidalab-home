@@ -210,6 +210,7 @@ def create_paginated_table(data: list[dict]):
 
     show_all_button = ipw.Button(
         description="Show All",
+        tooltip="Unhide all hidden codes",
         button_style="primary",
         layout=ipw.Layout(margin="0 0 0 auto"),
     )
