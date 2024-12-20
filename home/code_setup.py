@@ -8,8 +8,8 @@ from IPython.display import display
 CONFIG = {
     "column_widths": {
         "Full Label": "25%",
-        "Executable Path": "70%",
-        "Hide": "5%",
+        "Executable Path": "65%",
+        "Hide": "10%",
     },
     "cell_style": {"padding": "2px 5px"},
     "rows_per_page": 10,
@@ -199,9 +199,22 @@ def create_paginated_table(data: list[dict]):
 
     table_output = ipw.Output()
 
+    search_box = ipw.Text(
+        description="Search:",
+        placeholder="Filter by label or path...",
+        layout=ipw.Layout(width="50%"),
+        style={"description_width": "initial"},
+    )
+    search_box.observe(
+        on_search_change,
+        "value",
+    )
+
     show_hidden_only_button = ipw.Checkbox(
         value=False,
+        indent=False,
         description="Show hidden codes only",
+        layout=ipw.Layout(width="fit-content", flex="1", margin="2px 10px"),
     )
     show_hidden_only_button.observe(
         on_show_hidden_click,
@@ -209,22 +222,12 @@ def create_paginated_table(data: list[dict]):
     )
 
     show_all_button = ipw.Button(
-        description="Show All",
+        description="Unhide All",
         tooltip="Unhide all hidden codes",
         button_style="primary",
-        layout=ipw.Layout(margin="0 0 0 auto"),
+        layout=ipw.Layout(margin="0", width="105px"),
     )
     show_all_button.on_click(on_show_all_click)
-
-    search_box = ipw.Text(
-        description="Search:",
-        placeholder="Filter by label or path...",
-        layout=ipw.Layout(width="50%"),
-    )
-    search_box.observe(
-        on_search_change,
-        "value",
-    )
 
     filters = ipw.HBox(
         children=[
@@ -232,6 +235,7 @@ def create_paginated_table(data: list[dict]):
             show_hidden_only_button,
             show_all_button,
         ],
+        layout=ipw.Layout(padding="0 8px", align_items="center"),
     )
 
     pagination = ipw.HBox(layout=ipw.Layout(justify_content="center"))
