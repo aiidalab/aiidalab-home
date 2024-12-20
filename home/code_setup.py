@@ -167,7 +167,7 @@ def create_paginated_table(data: list[dict]):
             query = query.strip().lower()
             filtered = [
                 row
-                for row in data
+                for row in filtered
                 if query in row["Full Label"].lower()
                 or query in row["Executable Path"].lower()
             ]
