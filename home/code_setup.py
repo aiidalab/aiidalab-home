@@ -111,7 +111,7 @@ def create_paginated_table(data: list[dict]):
         current_page.value = int(button.description)
         render_table_with_filters()
 
-    def on_show_active(_):
+    def on_show_hidden_click(_):
         render_table_with_filters()
 
     def on_show_all_click(_):
@@ -120,7 +120,7 @@ def create_paginated_table(data: list[dict]):
 
     def on_checkbox_change(change):
         update_code_visibility(change.owner.full_label, change.new)
-        if show_active.value:
+        if show_hidden_only_button.value:
             render_table_with_filters()
 
     def on_search_change(_):
@@ -156,12 +156,12 @@ def create_paginated_table(data: list[dict]):
 
         return [create_page_button(i) for i in range(1, total_pages + 1)]
 
-    def filter_data(data, show_active, query):
-        """Filter the data based on active status and search query."""
+    def filter_data(data, show_hidden_only, query):
+        """Filter the data based on current control values."""
         filtered = data[:]
 
-        if show_active:
-            filtered = [row for row in data if not row["Hide"]]
+        if show_hidden_only:
+            filtered = [row for row in data if row["Hide"]]
 
         if query:
             query = query.strip().lower()
@@ -176,7 +176,11 @@ def create_paginated_table(data: list[dict]):
 
     def render_table_with_filters():
         """Render the table with current filters applied."""
-        visible_data = filter_data(data, show_active.value, search_box.value)
+        visible_data = filter_data(
+            data,
+            show_hidden_only_button.value,
+            search_box.value,
+        )
 
         rpg = CONFIG["rows_per_page"]
         total_pages = (len(visible_data) + rpg - 1) // rpg
@@ -195,12 +199,12 @@ def create_paginated_table(data: list[dict]):
 
     table_output = ipw.Output()
 
-    show_active = ipw.Checkbox(
+    show_hidden_only_button = ipw.Checkbox(
         value=False,
-        description="Show active codes only",
+        description="Show hidden codes only",
     )
-    show_active.observe(
-        on_show_active,
+    show_hidden_only_button.observe(
+        on_show_hidden_click,
         "value",
     )
 
@@ -224,7 +228,7 @@ def create_paginated_table(data: list[dict]):
     filters = ipw.HBox(
         children=[
             search_box,
-            show_active,
+            show_hidden_only_button,
             show_all_button,
         ],
     )
