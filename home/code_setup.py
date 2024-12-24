@@ -7,8 +7,8 @@ from IPython.display import display
 
 CONFIG = {
     "column_widths": {
-        "Full Label": "25%",
-        "Executable Path": "65%",
+        "Full label": "25%",
+        "Executable path": "65%",
         "Hide": "10%",
     },
     "cell_style": {"padding": "2px 5px"},
@@ -21,8 +21,8 @@ def fetch_code_data():
     codes: list[orm.Code] = orm.Code.collection.all()
     return [
         {
-            "Full Label": f"{code.label}@{code.computer.label}",
-            "Executable Path": code.get_executable().as_posix(),
+            "Full label": f"{code.label}@{code.computer.label}",
+            "Executable path": code.get_executable().as_posix(),
             "Hide": code.is_hidden,
         }
         for code in codes
@@ -52,21 +52,21 @@ def create_row(row, on_checkbox_change):
         tooltip="Check to hide this code in code selection widgets",
         layout=ipw.Layout(width="fit-content", margin="2px 2px 2px 15px"),
     )
-    hide_checkbox.full_label = row["Full Label"]
+    hide_checkbox.full_label = row["Full label"]
     hide_checkbox.observe(on_checkbox_change, names="value")
     table_row = ipw.HBox(
         children=[
             ipw.Label(
-                value=str(row["Full Label"]),
+                value=str(row["Full label"]),
                 layout=ipw.Layout(
-                    width=CONFIG["column_widths"]["Full Label"],
+                    width=CONFIG["column_widths"]["Full label"],
                     **CONFIG["cell_style"],
                 ),
             ),
             ipw.Label(
-                value=str(row["Executable Path"]),
+                value=str(row["Executable path"]),
                 layout=ipw.Layout(
-                    width=CONFIG["column_widths"]["Executable Path"],
+                    width=CONFIG["column_widths"]["Executable path"],
                     **CONFIG["cell_style"],
                 ),
             ),
@@ -128,7 +128,7 @@ def create_paginated_table(data: list[dict]):
 
     def update_code_visibility(full_label, is_hidden):
         """Update the visibility of a `Code` node."""
-        code_row = next(filter(lambda row: row["Full Label"] == full_label, data))
+        code_row = next(filter(lambda row: row["Full label"] == full_label, data))
         try:
             code = orm.load_code(full_label)
             code.is_hidden = is_hidden
@@ -168,8 +168,8 @@ def create_paginated_table(data: list[dict]):
             filtered = [
                 row
                 for row in filtered
-                if query in row["Full Label"].lower()
-                or query in row["Executable Path"].lower()
+                if query in row["Full label"].lower()
+                or query in row["Executable path"].lower()
             ]
 
         return filtered
@@ -222,7 +222,7 @@ def create_paginated_table(data: list[dict]):
     )
 
     show_all_button = ipw.Button(
-        description="Unhide All",
+        description="Unhide all",
         tooltip="Unhide all hidden codes",
         button_style="primary",
         layout=ipw.Layout(margin="0", width="105px"),
