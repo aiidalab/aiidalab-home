@@ -21,23 +21,29 @@
 }
 
 .logo {
-  max-width: 200px;
-  margin: 20px 0;
+  text-align: center;
+}
+
+.logo img {
+  width: 80%;
 }
 
 .features {
   display: flex;
   gap: 50px;
   margin-top: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1vw;
+  width: 100%;
+  max-width: 800px;
 }
 
 .feature {
-  display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-width: 140px;
-  min-height: 140px;
+  min-width: 120px;
+  min-height: 120px;
   text-align: center;
   text-decoration: none;
   color: inherit;
@@ -63,9 +69,15 @@
 
 .feature:hover .feature-logo {
   transform: scale(1.2);
+  -webkit-transform: scale(1.2);
+  -moz-transform: scale(1.2);
+  -ms-transform: scale(1.2);
+  -o-transform: scale(1.2);
 }
 
 .feature-logo {
+  width: min(12vw, 100px);
+  height: auto;
   max-width: 100px;
   margin-bottom: 10px;
   font-size: 40px;
@@ -77,8 +89,12 @@
 }
 
 .feature-logo:hover {
-  transform: scale(1.2);
   text-decoration: none;
+  transform: scale(1.2);
+  -webkit-transform: scale(1.2);
+  -moz-transform: scale(1.2);
+  -ms-transform: scale(1.2);
+  -o-transform: scale(1.2);
 }
 
 .feature-label {
