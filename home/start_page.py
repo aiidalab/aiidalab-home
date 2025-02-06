@@ -158,7 +158,7 @@ class AppWidget(ipw.VBox):
             )
             if app.metadata.get("external_url"):
                 footer_items.append(
-                    f"""<a href="{app.metadata['external_url']}" target="_blank"><button>URL</button></a>"""
+                    f"""<a href="{app.metadata["external_url"]}" target="_blank"><button>URL</button></a>"""
                 )
 
         if allow_move:
