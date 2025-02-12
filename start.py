@@ -3,6 +3,9 @@ import ipywidgets as ipw
 
 def get_start_widget(appbase, jupbase):
     # http://fontawesome.io/icons/
+
+    width = "70px"
+
     template = """
     <center>
     <table>
@@ -15,7 +18,7 @@ def get_start_widget(appbase, jupbase):
     File Manager
     </td>
 
-    <td style="width:70px"></td>
+    <td style="width:{width}"></td>
 
     <td style="text-align:center">
     <a style="{style}" href="{appbase}/terminal.ipynb" title="Open Terminal" target="_blank">
@@ -24,7 +27,7 @@ def get_start_widget(appbase, jupbase):
     Terminal
     </td>
 
-    <td style="width:70px"></td>
+    <td style="width:{width}"></td>
 
     <td style="text-align:center">
     <a style="{style}" href="{jupbase}/tree/#running" title="Task Manager" target="_blank">
@@ -33,7 +36,7 @@ def get_start_widget(appbase, jupbase):
     Tasks
     </td>
 
-    <td style="width:70px"></td>
+    <td style="width:{width}"></td>
 
     <td style="text-align:center">
     <a style="{style}" href="{appbase}/appstore.ipynb" title="Install New Apps" target="_blank">
@@ -42,7 +45,16 @@ def get_start_widget(appbase, jupbase):
     App Store
     </td>
 
-    <td style="width:70px"></td>
+    <td style="width:{width}"></td>
+
+    <td style="text-align:center">
+    <a style="{style}" href="{appbase}/control.ipynb" title="Manage AiiDA and AiiDAlab" target="_blank">
+    <i class="fa fa-cogs fa-3x" aria-hidden="true"></i>
+    </a><br>
+    Control
+    </td>
+
+    <td style="width:{width}"></td>
 
     <td style="text-align:center">
     <a style="{style}" href="https://aiidalab.readthedocs.io" title="Learn about AiiDAlab" target="_blank">
@@ -55,5 +67,7 @@ def get_start_widget(appbase, jupbase):
     </center>
 """
 
-    html = template.format(appbase=appbase, jupbase=jupbase, style="margin:20px")
+    html = template.format(
+        appbase=appbase, jupbase=jupbase, style="margin:20px", width=width
+    )
     return ipw.HTML(html)
