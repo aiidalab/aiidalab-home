@@ -1,5 +1,7 @@
 """AiiDAlab basic widgets."""
 
+from datetime import datetime
+import subprocess
 from threading import Timer
 
 import ipywidgets as ipw
@@ -187,3 +189,53 @@ class LogOutputWidget(ipw.VBox):
             self._output.value = (
                 self.template.format(text=self.value) if self.value else ""
             )
+
+
+class CountDownWidget(ipw.VBox):
+    """A countdown w.r.t the AiiDAlab container creation time."""
+
+    TEMPLATE = "<h1 style='color: {color}'>Time remaining: <b>{countdown}</b></h1>"
+    FINAL_WARNING = "<h1 style='color: red'>AiiDAlab container shutdown imminent - please save your work!</h1>"
+
+    def __init__(self, duration: str, **kwargs):
+        self.reference_time = datetime.strptime(duration, "%H:%M:%S")
+
+        self.countdown = ipw.HTML()
+
+        super().__init__(
+            children=[
+                self.countdown,
+            ],
+            **kwargs,
+        )
+
+    def start(self):
+        Timer(1, self._update_countdown).start()
+
+    def _update_countdown(self):
+        try:
+            remaining, time_running_out = self._remaining_time()
+            message = self.TEMPLATE.format(
+                color="red" if time_running_out else "black",
+                countdown=remaining,
+            )
+        except Exception:
+            remaining = None
+            message = "Failed to obtain remaining time."
+        self.countdown.value = message
+        if remaining != "00:00:00":
+            self.start()
+        else:
+            self.countdown.value = self.FINAL_WARNING
+
+    def _remaining_time(self) -> tuple[str, bool]:
+        process = subprocess.check_output(["ps", "-o", "etime=", "-p", "1"])
+        elapsed_str = process.decode().strip()
+        if len(elapsed_str) < 6:
+            elapsed_str = f"00:{elapsed_str}"
+        elapsed_time = datetime.strptime(elapsed_str, "%H:%M:%S")
+        remaining = self.reference_time - elapsed_time
+        if remaining.total_seconds() >= 0:
+            time_running_out = remaining.total_seconds() < 60 * 5
+            return (datetime.min + remaining).strftime("%H:%M:%S"), time_running_out
+        return "00:00:00", True
