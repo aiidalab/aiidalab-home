@@ -1,7 +1,7 @@
 """AiiDAlab basic widgets."""
 
-from datetime import datetime
 import subprocess
+from datetime import datetime
 from threading import Timer
 
 import ipywidgets as ipw
