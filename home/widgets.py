@@ -197,8 +197,8 @@ class CountDownWidget(ipw.VBox):
     TEMPLATE = "<h1 style='color: {color}'>Time remaining: <b>{countdown}</b></h1>"
     FINAL_WARNING = "<h1 style='color: red'>AiiDAlab container shutdown imminent - please save your work!</h1>"
 
-    def __init__(self, duration: str, **kwargs):
-        self.reference_time = datetime.strptime(duration, "%H:%M:%S")
+    def __init__(self, lifetime: str, **kwargs):
+        self.reference_time = datetime.strptime(lifetime, "%H:%M:%S")
 
         self.countdown = ipw.HTML()
 
