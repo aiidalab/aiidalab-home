@@ -9,6 +9,7 @@ import ipywidgets as ipw
 import traitlets
 from aiidalab.app import AiidaLabApp
 from aiidalab.config import AIIDALAB_APPS
+from markdown import Markdown
 
 from home.utils import load_widget
 from home.widgets import AppStatusInfoWidget
@@ -125,8 +126,6 @@ class AiidaLabHome:
         self.write_config(config)
 
     def _create_notification(self, content):
-        from markdown import Markdown
-
         md = Markdown()
         html = md.convert(content)
         notification_widget = ipw.HTML(html)
