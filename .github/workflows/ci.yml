@@ -33,7 +33,7 @@ jobs:
         steps:
 
             - name: Check out app
-              uses: actions/checkout@v5
+              uses: actions/checkout@v6
 
             - name: Set up Python
               uses: actions/setup-python@v6
