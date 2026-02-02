@@ -99,6 +99,7 @@ class AiidaLabAppStore(ipw.HBox):
         self.page_selector.options = list(
             range(1, int(len(self.apps_to_display) / self.items_per_page.value + 2))
         )
+        self.page_selector.value = 1
 
         # this parts makes sure that render function will always run one time only:
         # if page number changed in the previous step - the render was run automatically already

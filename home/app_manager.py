@@ -184,6 +184,13 @@ class AppManagerWidget(ipw.VBox):
                 (self._formatted_version(version), version) for version in versions
             ],
         )
+
+        ipw.dlink(
+            (self.app, "available_versions"),
+            (self.version_selector.version_to_install, "index"),
+            transform=lambda versions: 0 if versions else None,
+        )
+
         ipw.dlink(
             (self.app, "installed_version"),
             (self.version_selector.installed_version, "value"),
