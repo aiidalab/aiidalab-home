@@ -305,7 +305,7 @@ class ProcessInputsWidget(ipw.VBox):
     def show_selected_input(self, change=None):
         """Function that displays process inputs selected in the `inputs` Dropdown widget."""
         try:
-            from aiidalab_widgets_baase import viewer  # noqa PLC0415
+            from aiidalab_widgets_base import viewer  # noqa PLC0415
 
             with self.output:
                 self.info.value = ""
@@ -436,7 +436,7 @@ class ProcessOutputsWidget(ipw.VBox):
     def show_selected_output(self, change=None):
         """Function that displays process output selected in the `outputs` Dropdown widget."""
         try:
-            from aiidalab_widgets_baase import viewer  # noqa PLC0415
+            from aiidalab_widgets_base import viewer  # noqa PLC0415
 
             with self.output:
                 self.info.value = ""
