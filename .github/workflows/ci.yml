@@ -66,3 +66,34 @@ jobs:
                   name: Screenshots-${{ matrix.browser }}
                   path: screenshots/
                   if-no-files-found: error
+
+    test-package:
+
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        services:
+            rabbitmq:
+                image: rabbitmq:latest
+                ports:
+                    - 5672:5672
+
+        steps:
+
+            - name: Check out app
+              uses: actions/checkout@v6
+
+            - name: Set up Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: '3.11'
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v7
+              with:
+                  version: 0.4.20
+
+            - name: Install package test dependencies
+              run: uv pip install --system .[dev]
+
+            - name: Run pytest
+              run: pytest -v tests/
