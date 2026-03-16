@@ -104,3 +104,47 @@ def test_process_list_widget(multiply_add_completed_workchain):
     widget.update()
     assert "processes shown" in widget.output.value
     assert "<table" in widget.table.value
+    assert (
+        f"home/process.ipynb?id={multiply_add_completed_workchain.pk}"
+        in widget.table.value
+    )
+
+
+def test_process_list_widget_filters_descriptions(generate_calc_job_node):
+    matching_process = generate_calc_job_node(inputs={"parameters": orm.Int(1)})
+    matching_process.description = "calc-42 complete"
+
+    other_process = generate_calc_job_node(inputs={"parameters": orm.Int(2)})
+    other_process.description = "skip me"
+
+    process_without_description = generate_calc_job_node(
+        inputs={"parameters": orm.Int(3)}
+    )
+
+    widget = home_process.ProcessListWidget()
+    widget.description_contains = r"calc-\d+"
+    widget.update()
+
+    assert widget.output.value == "1 processes shown"
+    assert "calc-42 complete" in widget.table.value
+    assert "skip me" not in widget.table.value
+    assert f"home/process.ipynb?id={matching_process.pk}" in widget.table.value
+    assert f"home/process.ipynb?id={other_process.pk}" not in widget.table.value
+    assert (
+        f"home/process.ipynb?id={process_without_description.pk}"
+        not in widget.table.value
+    )
+
+
+def test_process_list_widget_renders_empty_results(multiply_add_completed_workchain):
+    widget = home_process.ProcessListWidget()
+    widget.process_label = "definitely-no-such-process-label"
+    widget.update()
+
+    assert widget.output.value == "0 processes shown"
+    assert "<table" in widget.table.value
+    assert "<th>PK</th>" in widget.table.value
+    assert (
+        f"home/process.ipynb?id={multiply_add_completed_workchain.pk}"
+        not in widget.table.value
+    )
