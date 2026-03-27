@@ -36,21 +36,17 @@ jobs:
             - name: Check out app
               uses: actions/checkout@v6
 
-            - name: Set up Python
-              uses: actions/setup-python@v6
-              with:
-                  python-version: '3.11'
-
             - name: Setup uv
               uses: astral-sh/setup-uv@v7
               with:
-                  version: 0.4.20
+                  python-version: '3.12'
+                  activate-environment: 'true'
 
             - name: Install package test dependencies
               # Notebook tests happen in the container, here we only need to install
               # the pytest-docker dependency. Unfortunately, uv/pip does not allow to
               # only install [dev] dependencies so we end up installing all the rest as well.
-              run: uv pip install --system .[dev]
+              run: uv pip install .[dev]
 
             - name: Set jupyter token env
               run: echo "JUPYTER_TOKEN=$(openssl rand -hex 32)" >> $GITHUB_ENV
