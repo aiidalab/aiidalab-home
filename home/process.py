@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import os
+import re
 import sys
 import threading
 import time
@@ -13,7 +14,6 @@ import warnings
 from collections.abc import Mapping
 
 import ipywidgets as ipw
-import pandas as pd
 import traitlets as tl
 
 # AiiDA imports
@@ -27,6 +27,7 @@ from aiida.cmdline.utils.common import (
 from aiida.common.links import LinkType
 from aiida.tools.query.calculation import CalculationQueryBuilder
 from IPython.display import HTML, Javascript, clear_output, display
+from jinja2 import Template
 
 
 class CantRegisterCallbackError(Exception):
@@ -36,6 +37,85 @@ class CantRegisterCallbackError(Exception):
         super().__init__(
             f"Cannot register callback function {function.__name__!r} after monitoring has started."
         )
+
+
+PROCESS_TABLE_TEMPLATE = Template(
+    """
+    <style>
+        .df { border: none; }
+        .df tbody tr:nth-child(odd) { background-color: #e5e7e9; }
+        .df tbody tr:nth-child(odd):hover { background-color: #f5b7b1; }
+        .df tbody tr:nth-child(even):hover { background-color: #f5b7b1; }
+        .df tbody td { min-width: 150px; text-align: center; border: none; }
+        .df th { text-align: center; border: none; border-bottom: 1px solid black; }
+    </style>
+    <table class="df">
+        <thead>
+            <tr>
+            {% for header in headers %}
+                <th>{{ header }}</th>
+            {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+        {% for row in rows %}
+            <tr>
+            {% for header in headers %}
+                <td>{{ row[header] }}</td>
+            {% endfor %}
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    """
+)
+
+
+def _stringify_process_cell(value):
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _normalize_process_rows(projected):
+    if not projected:
+        return [], []
+
+    headers = list(projected[0])
+    rows = [
+        {
+            header: _stringify_process_cell(value)
+            for header, value in zip(headers, entry)
+        }
+        for entry in projected[1:]
+    ]
+    return headers, rows
+
+
+def _filter_process_rows(rows, description_contains):
+    if not description_contains:
+        return rows
+
+    pattern = re.compile(description_contains)
+    return [row for row in rows if pattern.search(row.get("Description", ""))]
+
+
+def _add_process_links(rows, path_to_root):
+    linked_rows = []
+    for row in rows:
+        linked_row = dict(row)
+        pk = linked_row.get("PK", "")
+        linked_row["PK"] = (
+            f"""<a href={path_to_root}home/process.ipynb?id={pk} target="_blank">{pk}</a>"""
+            if pk
+            else ""
+        )
+        linked_rows.append(linked_row)
+    return linked_rows
+
+
+def _render_process_table(headers, rows):
+    return PROCESS_TABLE_TEMPLATE.render(headers=headers, rows=rows)
 
 
 def get_running_calcs(process):
@@ -576,22 +656,6 @@ class ProcessListWidget(ipw.VBox):
 
     def update(self, _=None):
         """Perform the query."""
-        pd.set_option("max_colwidth", 40)
-        # Here we are defining properties of 'df' class (specified while exporting pandas table into html).
-        # Since the exported object is nothing more than HTML table, all 'standard' HTML table settings
-        # can be applied to it as well.
-        # For more information on how to controle the table appearance please visit:
-        # https://css-tricks.com/complete-guide-table-element/
-        self.table.value = """
-        <style>
-            .df { border: none; }
-            .df tbody tr:nth-child(odd) { background-color: #e5e7e9; }
-            .df tbody tr:nth-child(odd):hover { background-color:   #f5b7b1; }
-            .df tbody tr:nth-child(even):hover { background-color:  #f5b7b1; }
-            .df tbody td { min-width: 150px; text-align: center; border: none }
-            .df th { text-align: center; border: none;  border-bottom: 1px solid black;}
-        </style>
-        """
         builder = CalculationQueryBuilder()
         filters = builder.get_filters(
             all_entries=False,
@@ -630,19 +694,16 @@ class ProcessListWidget(ipw.VBox):
                 "description",
             ],
         )
-        dataf = pd.DataFrame(projected[1:], columns=projected[0])
+        headers, rows = _normalize_process_rows(projected)
 
         # Keep only process that contain the requested string in the description.
-        if self.description_contains:
-            dataf = dataf[dataf.Description.str.contains(self.description_contains)]
+        rows = _filter_process_rows(rows, self.description_contains)
 
-        self.output.value = f"{len(dataf)} processes shown"
+        self.output.value = f"{len(rows)} processes shown"
 
         # Add HTML links.
-        dataf["PK"] = dataf["PK"].apply(
-            lambda x: f"""<a href={self.path_to_root}home/process.ipynb?id={x} target="_blank">{x}</a>"""
-        )
-        self.table.value += dataf.to_html(classes="df", escape=False, index=False)
+        rows = _add_process_links(rows, self.path_to_root)
+        self.table.value = _render_process_table(headers, rows)
 
     @tl.validate("incoming_node")
     def _validate_incoming_node(self, provided):
