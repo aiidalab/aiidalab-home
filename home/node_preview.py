@@ -24,8 +24,8 @@ def render_unavailable_preview() -> str:
 def render_node_preview(node: orm.Node) -> object:
     """Render a node preview using AWB when it is available."""
     try:
-        viewer = _load_awb_viewer()
+        from aiidalab_widgets_base import viewer
     except ImportError:
-        return render_unavailable_preview()
-
-    return viewer(node)
+        return node
+    else:
+        return viewer(node)
