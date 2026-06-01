@@ -123,17 +123,47 @@ class AppManagerWidget(ipw.VBox):
         </div>"""
     )
 
-    TEMPLATE = Template(
-        """<b> <div style="font-size: 30px; text-align:center;">{{ app.title }}</div></b>
-    <br>
-    <b>Authors:</b> {{ app.authors }}
-    <br>
-    <b>Description:</b> {{ app.description }}
-    {% if app.url and app.url.startswith("http") %}
-    <br>
-    <b>URL:</b> <a href="{{ app.url }}">{{ app.url }}</a>
-    {% endif %}"""
-    )
+    TEMPLATE = Template("""
+        <b><div style="font-size: 30px; text-align:center;">{{ app.title }}</div></b>
+        <br>
+        <b>Authors:</b> {{ app.authors }}
+        <br>
+        <b>Description:</b> {{ app.description }}
+        {% if app.url and app.url.startswith("http") %}
+            <br>
+            <b>URL:</b> <a href="{{ app.url }}">{{ app.url }}</a>
+        {% endif %}
+        <br>
+        {% if app.citations %}
+            <b>Citations:</b>
+            <br>
+            <ul>
+            {% for citation in app.citations %}
+                {% if citation.text %}
+                    {% if citation.link %}
+                        <a href="{{ citation.link }}" target="_blank" noreferrer noopener>{{ citation.text }}</a>
+                    {% else %}
+                        {{ citation.text }}
+                    {% endif %}
+                {% else %}
+                    {{ citation.authors | join(", ") }},
+                    {% if citation.title %}
+                        "{{ citation.title }}".
+                    {% endif %}
+                    <em>{{ citation.journal }}</em>
+                    {% if citation.volume %}
+                        , <b>{{ citation.volume }}</b>
+                    {% endif %}
+                    {% if citation.issue %}
+                        , {{ citation.issue }}
+                    {% endif %}
+                    ({{ citation.year }}).
+                    <a href="https://doi.org/{{ citation.doi }}" target="_blank" noreferrer noopener>https://doi.org/{{ citation.doi }}</a>
+                {% endif %}
+            {% endfor %}
+            </ul>
+        {% endif %}
+    """)
 
     def __init__(self, app, minimalistic=False):
         self.app = app
