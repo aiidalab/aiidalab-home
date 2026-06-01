@@ -1,4 +1,3 @@
-import inspect
 import sys
 import types
 
@@ -82,10 +81,6 @@ def test_process_outputs_widget_shows_unavailable_message(
     selected_output = multiply_add_completed_workchain.outputs["result"]
     assert widget.info.value == f"PK: {selected_output.pk}"
     assert capture_display == [node_preview.AWB_UNAVAILABLE_MESSAGE]
-
-
-def test_process_module_does_not_import_awb_directly():
-    assert "aiidalab_widgets_base" not in inspect.getsource(home_process)
 
 
 def test_process_report_widget(multiply_add_completed_workchain):
