@@ -10,22 +10,11 @@ AWB_UNAVAILABLE_MESSAGE = (
 )
 
 
-def _load_awb_viewer():
-    from aiidalab_widgets_base import viewer  # noqa: PLC0415
-
-    return viewer
-
-
-def render_unavailable_preview() -> str:
-    """Return the fallback message shown when AWB is unavailable."""
-    return AWB_UNAVAILABLE_MESSAGE
-
-
 def render_node_preview(node: orm.Node) -> object:
     """Render a node preview using AWB when it is available."""
     try:
-        from aiidalab_widgets_base import viewer
+        from aiidalab_widgets_base import viewer  # noqa: PLC0415
     except ImportError:
-        return node
-    else:
-        return viewer(node)
+        return AWB_UNAVAILABLE_MESSAGE
+
+    return viewer(node)

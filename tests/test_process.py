@@ -1,4 +1,6 @@
 import inspect
+import sys
+import types
 
 import pytest
 from aiida import orm
@@ -18,23 +20,20 @@ def capture_display(monkeypatch):
 
 def test_render_node_preview_uses_awb_when_available(monkeypatch):
     node = orm.Int(1)
+    module = types.ModuleType("aiidalab_widgets_base")
+    module.viewer = lambda _: "mock-viewer"
 
-    monkeypatch.setattr(
-        node_preview, "_load_awb_viewer", lambda: lambda _: "mock-viewer"
-    )
+    monkeypatch.setitem(sys.modules, "aiidalab_widgets_base", module)
 
     assert node_preview.render_node_preview(node) == "mock-viewer"
 
 
 def test_render_node_preview_returns_message_when_awb_is_unavailable(monkeypatch):
-    def raise_import_error():
-        raise ImportError
-
-    monkeypatch.setattr(node_preview, "_load_awb_viewer", raise_import_error)
+    monkeypatch.delitem(sys.modules, "aiidalab_widgets_base", raising=False)
 
     assert (
         node_preview.render_node_preview(orm.Int(1))
-        == node_preview.render_unavailable_preview()
+        == node_preview.AWB_UNAVAILABLE_MESSAGE
     )
 
 
@@ -72,7 +71,7 @@ def test_process_outputs_widget_shows_unavailable_message(
     monkeypatch.setattr(
         home_process,
         "render_node_preview",
-        lambda _: node_preview.render_unavailable_preview(),
+        lambda _: node_preview.AWB_UNAVAILABLE_MESSAGE,
     )
 
     home_process.ProcessOutputsWidget()
@@ -82,7 +81,7 @@ def test_process_outputs_widget_shows_unavailable_message(
 
     selected_output = multiply_add_completed_workchain.outputs["result"]
     assert widget.info.value == f"PK: {selected_output.pk}"
-    assert capture_display == [node_preview.render_unavailable_preview()]
+    assert capture_display == [node_preview.AWB_UNAVAILABLE_MESSAGE]
 
 
 def test_process_module_does_not_import_awb_directly():
