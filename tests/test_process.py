@@ -1,6 +1,7 @@
 import sys
 import types
 
+import ipywidgets as ipw
 import pytest
 from aiida import orm
 
@@ -30,10 +31,9 @@ def test_render_node_preview_uses_awb_when_available(monkeypatch):
 def test_render_node_preview_returns_message_when_awb_is_unavailable(monkeypatch):
     monkeypatch.delitem(sys.modules, "aiidalab_widgets_base", raising=False)
 
-    assert (
-        node_preview.render_node_preview(orm.Int(1))
-        == node_preview.AWB_UNAVAILABLE_MESSAGE
-    )
+    result = node_preview.render_node_preview(orm.Int(1))
+    assert isinstance(result, ipw.HTML)
+    assert node_preview.AWB_UNAVAILABLE_MESSAGE in result.value
 
 
 def test_process_inputs_widget_uses_node_preview_adapter(
