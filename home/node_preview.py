@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ipywidgets as ipw
-from aiida import orm
 
 AWB_UNAVAILABLE_MESSAGE = (
     "For a richer output view, please install the AiiDAlab widgets with "
