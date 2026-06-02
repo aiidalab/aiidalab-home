@@ -7,7 +7,7 @@ from aiida import orm
 
 AWB_UNAVAILABLE_MESSAGE = (
     "The AiiDAlab widgets are not available. Please install it with "
-    "`pip install aiidalab-widgets-base` to use this feature."
+    "<code>pip install aiidalab-widgets-base</code> to use this feature."
 )
 
 
