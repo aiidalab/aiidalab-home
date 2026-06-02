@@ -6,8 +6,8 @@ import ipywidgets as ipw
 from aiida import orm
 
 AWB_UNAVAILABLE_MESSAGE = (
-    "The AiiDAlab widgets are not available. Please install it with "
-    "<code>pip install aiidalab-widgets-base</code> to use this feature."
+    "For a richer output view, please install the AiiDAlab widgets with "
+    "<code>pip install aiidalab-widgets-base</code>."
 )
 
 
