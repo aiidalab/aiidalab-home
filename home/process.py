@@ -29,6 +29,8 @@ from aiida.tools.query.calculation import CalculationQueryBuilder
 from IPython.display import HTML, Javascript, clear_output, display
 from jinja2 import Template
 
+from home.node_preview import render_node_preview
+
 
 class CantRegisterCallbackError(Exception):
     """Exception raised when trying to register a callback after monitoring has started."""
@@ -384,22 +386,13 @@ class ProcessInputsWidget(ipw.VBox):
 
     def show_selected_input(self, change=None):
         """Function that displays process inputs selected in the `inputs` Dropdown widget."""
-        try:
-            from aiidalab_widgets_base import viewer  # noqa PLC0415
-
-            with self.output:
-                self.info.value = ""
-                clear_output()
-                if change["new"]:
-                    selected_input = orm.load_node(change["new"])
-                    self.info.value = f"PK: {selected_input.pk}"
-                    display(viewer(selected_input))
-        except ImportError:
-            self.output.clear_output()
-            with self.output:
-                print(
-                    "The AiiDAlab widgets are not available. Please install it with `pip install aiidalab-widgets-base` to use this feature."
-                )
+        with self.output:
+            self.info.value = ""
+            clear_output()
+            if change["new"]:
+                selected_input = orm.load_node(change["new"])
+                self.info.value = f"PK: {selected_input.pk}"
+                display(render_node_preview(selected_input))
 
 
 class ProcessMonitor(tl.HasTraits):
@@ -515,22 +508,13 @@ class ProcessOutputsWidget(ipw.VBox):
 
     def show_selected_output(self, change=None):
         """Function that displays process output selected in the `outputs` Dropdown widget."""
-        try:
-            from aiidalab_widgets_base import viewer  # noqa PLC0415
-
-            with self.output:
-                self.info.value = ""
-                clear_output()
-                if change["new"]:
-                    selected_output = self.process.outputs[change["new"]]
-                    self.info.value = f"PK: {selected_output.pk}"
-                    display(viewer(selected_output))
-        except ImportError:
-            self.output.clear_output()
-            with self.output:
-                print(
-                    "The AiiDAlab widgets are not available. Please install it with `pip install aiidalab-widgets-base` to use this feature."
-                )
+        with self.output:
+            self.info.value = ""
+            clear_output()
+            if change["new"]:
+                selected_output = self.process.outputs[change["new"]]
+                self.info.value = f"PK: {selected_output.pk}"
+                display(render_node_preview(selected_output))
 
 
 class ProcessReportWidget(ipw.HTML):

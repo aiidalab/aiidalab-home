@@ -1,23 +1,44 @@
 import sys
 import types
 
+import ipywidgets as ipw
 import pytest
 from aiida import orm
 
+from home import node_preview
 from home import process as home_process
 
 pytestmark = pytest.mark.usefixtures("aiida_profile_clean")
 
 
 @pytest.fixture
-def mock_viewer_module(monkeypatch):
-    """Provide a lightweight viewer module for optional AWB integration paths."""
+def capture_display(monkeypatch):
+    displayed = []
+    monkeypatch.setattr(home_process, "display", displayed.append)
+    return displayed
+
+
+def test_render_node_preview_uses_awb_when_available(monkeypatch):
+    node = orm.Int(1)
     module = types.ModuleType("aiidalab_widgets_base")
     module.viewer = lambda _: "mock-viewer"
+
     monkeypatch.setitem(sys.modules, "aiidalab_widgets_base", module)
 
+    assert node_preview.render_node_preview(node) == "mock-viewer"
 
-def test_process_inputs_widget(generate_calc_job_node, mock_viewer_module):
+
+def test_render_node_preview_returns_message_when_awb_is_unavailable(monkeypatch):
+    monkeypatch.delitem(sys.modules, "aiidalab_widgets_base", raising=False)
+
+    result = node_preview.render_node_preview(orm.Int(1))
+    assert isinstance(result, ipw.HTML)
+    assert node_preview.AWB_UNAVAILABLE_MESSAGE in result.value
+
+
+def test_process_inputs_widget_uses_node_preview_adapter(
+    generate_calc_job_node, monkeypatch, capture_display
+):
     process = generate_calc_job_node(
         inputs={
             "parameters": orm.Int(1),
@@ -26,6 +47,8 @@ def test_process_inputs_widget(generate_calc_job_node, mock_viewer_module):
             },
         }
     )
+
+    monkeypatch.setattr(home_process, "render_node_preview", lambda _: "mock-viewer")
 
     home_process.ProcessInputsWidget()
 
@@ -38,9 +61,18 @@ def test_process_inputs_widget(generate_calc_job_node, mock_viewer_module):
     widget._inputs.value = nested_uuid
     selected_input = orm.load_node(nested_uuid)
     assert widget.info.value == f"PK: {selected_input.pk}"
+    assert capture_display == ["mock-viewer"]
 
 
-def test_process_outputs_widget(multiply_add_completed_workchain, mock_viewer_module):
+def test_process_outputs_widget_shows_unavailable_message(
+    multiply_add_completed_workchain, monkeypatch, capture_display
+):
+    monkeypatch.setattr(
+        home_process,
+        "render_node_preview",
+        lambda _: node_preview.AWB_UNAVAILABLE_MESSAGE,
+    )
+
     home_process.ProcessOutputsWidget()
 
     widget = home_process.ProcessOutputsWidget(process=multiply_add_completed_workchain)
@@ -48,6 +80,7 @@ def test_process_outputs_widget(multiply_add_completed_workchain, mock_viewer_mo
 
     selected_output = multiply_add_completed_workchain.outputs["result"]
     assert widget.info.value == f"PK: {selected_output.pk}"
+    assert capture_display == [node_preview.AWB_UNAVAILABLE_MESSAGE]
 
 
 def test_process_report_widget(multiply_add_completed_workchain):
