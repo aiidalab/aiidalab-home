@@ -34,7 +34,7 @@ jobs:
         steps:
 
             - name: Check out app
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
 
             - name: Setup uv
               uses: astral-sh/setup-uv@v7
@@ -77,7 +77,7 @@ jobs:
         steps:
 
             - name: Check out app
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
 
             - name: Set up Python
               uses: actions/setup-python@v6
