@@ -1,5 +1,6 @@
 import html
 import threading
+from datetime import datetime
 from typing import ClassVar
 
 import aiida
@@ -10,6 +11,30 @@ from aiida import engine, get_profile, manage, orm
 from aiida.engine.daemon.client import DaemonException
 
 from home import process
+
+_DAEMON_LINE_COLORS = {
+    "ok": "green",
+    "error": "red",
+    "warning": "#b58900",
+}
+
+
+def _daemon_status(client) -> tuple:
+    """Probe the daemon and return an (state, text) status pair."""
+    try:
+        state, text = "warning", "Daemon is not running"
+        # get_worker_info() blocks for the client timeout when the daemon
+        # is down, so only call it after confirming the daemon is running.
+        if client.is_daemon_running:
+            try:
+                workers = len(client.get_worker_info().get("info", []))
+                state, text = "ok", f"Daemon is running with {workers} worker(s)"
+            except DaemonException:
+                pass  # The daemon stopped between the check and the call.
+    except Exception as exc:
+        return "error", str(exc)
+    else:
+        return state, text
 
 
 class DaemonControlWidget(ipw.VBox):
@@ -132,11 +157,37 @@ class DaemonControlWidget(ipw.VBox):
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _update_status(self, _=None):
+        state, text = _daemon_status(self._daemon)
+        color = _DAEMON_LINE_COLORS[state]
+        self._status.value = f"<span style='color:{color}'>{html.escape(text)}</span>"
+
+
+class StatusOverviewWidget(ipw.VBox):
     _ROW_STYLES: ClassVar[dict] = {
         "ok": ("green", "&#10003;"),
         "error": ("red", "&#10007;"),
         "warning": ("#b58900", "&#9888;"),
     }
+
+    def __init__(self):
+        self._daemon = engine.daemon.get_daemon_client()
+        self._refreshing = False
+
+        self.info = ipw.HTML()
+        self._status = ipw.HTML()
+        self.refresh_button = ipw.Button(description="Refresh")
+        self.refresh_button.on_click(self.refresh)
+        self._last_updated = ipw.HTML()
+
+        super().__init__(
+            children=[
+                self.info,
+                self._status,
+                ipw.HBox([self.refresh_button, self._last_updated]),
+            ]
+        )
+        self.refresh()
 
     @classmethod
     def _status_row(cls, state, label, text):
@@ -150,7 +201,35 @@ class DaemonControlWidget(ipw.VBox):
             f"</tr>"
         )
 
-    def _update_status(self, _=None):
+    def refresh(self, _=None):
+        if self._refreshing:
+            return
+        self._refreshing = True
+        self.info.value = "Refreshing status... <i class='fa fa-spinner fa-spin'></i>"
+        self.refresh_button.disabled = True
+
+        def worker():
+            try:
+                self._update_status()
+            except Exception as exc:
+                self.info.value = (
+                    f"<span style='color:red'>Failed to refresh status: {exc}</span>"
+                )
+            else:
+                self.info.value = "<span style='color:green'>Status refreshed.</span>"
+            finally:
+                # Re-enable the button before touching anything else: if a
+                # later step raises, the page must not be left with the
+                # button permanently disabled.
+                self.refresh_button.disabled = False
+                self._refreshing = False
+                self._last_updated.value = (
+                    f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
+                )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _update_status(self):
         rows = []
 
         try:
@@ -194,21 +273,8 @@ class DaemonControlWidget(ipw.VBox):
         except Exception as exc:
             rows.append(self._status_row("error", "broker", str(exc)))
 
-        try:
-            # get_worker_info() blocks for the client timeout when the daemon
-            # is down, so only call it after confirming the daemon is running.
-            daemon_row = self._status_row("warning", "daemon", "Daemon is not running")
-            if self._daemon.is_daemon_running:
-                try:
-                    workers = len(self._daemon.get_worker_info().get("info", []))
-                    daemon_row = self._status_row(
-                        "ok", "daemon", f"Daemon is running with {workers} worker(s)"
-                    )
-                except DaemonException:
-                    pass  # The daemon stopped between the check and the call.
-            rows.append(daemon_row)
-        except Exception as exc:
-            rows.append(self._status_row("error", "daemon", str(exc)))
+        state, text = _daemon_status(self._daemon)
+        rows.append(self._status_row(state, "daemon", text))
 
         self._status.value = (
             "<table style='border-collapse:collapse;'>" + "".join(rows) + "</table>"
@@ -306,7 +372,7 @@ class ProfileControlWidget(ipw.VBox):
         self._confirm_box.layout.display = "none"
 
         self._rows_box = ipw.VBox()
-        self._refresh()
+        self.refresh()
 
         super().__init__(
             children=[
@@ -317,7 +383,7 @@ class ProfileControlWidget(ipw.VBox):
             ]
         )
 
-    def _refresh(self, _=None):
+    def refresh(self, _=None):
         config = manage.get_config()
         loaded_profile = get_profile()
         loaded_profile_name = (
@@ -346,7 +412,7 @@ class ProfileControlWidget(ipw.VBox):
         self._status.value = (
             f'<font color="green">Profile "{name}" is now the default.</font>'
         )
-        self._refresh()
+        self.refresh()
 
     def _on_delete_clicked(self, name):
         self._confirm_target = name
@@ -374,4 +440,4 @@ class ProfileControlWidget(ipw.VBox):
             self._status.value = f'<font color="green">Profile "{name}" deleted.</font>'
         self._confirm_target = None
         self._confirm_box.layout.display = "none"
-        self._refresh()
+        self.refresh()
