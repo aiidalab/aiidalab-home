@@ -3,7 +3,7 @@ import subprocess
 import ipywidgets as ipw
 import plumpy
 import traitlets as tr
-from aiida import engine, manage
+from aiida import engine, get_profile, manage
 from IPython.display import clear_output
 
 from home import process
@@ -124,16 +124,122 @@ class GroupControlWidget(ipw.VBox):
 
 
 class Profile(ipw.HBox):
-    def __init__(self, profile):
+    def __init__(self, profile, is_default, is_loaded, on_make_default, on_delete):
         self.profile = profile
-        self.name = ipw.HTML(f"""<font size="3"> * {self.profile.name}</font>""")
+
+        label = f"{profile.name} (default)" if is_default else profile.name
+        self.name = ipw.HTML(f"""<font size="3"> * {label}</font>""")
+
         self.make_default = ipw.Button(description="Make default", button_style="info")
-        self.delete = ipw.Button(description="Delele", button_style="danger")
+        if is_default:
+            self.make_default.disabled = True
+            self.make_default.tooltip = "Already the default profile"
+        else:
+            self.make_default.on_click(lambda _: on_make_default(profile.name))
+
+        self.delete = ipw.Button(description="Delete", button_style="danger")
+        if is_loaded:
+            self.delete.disabled = True
+            self.delete.tooltip = "This profile is currently in use by this notebook and cannot be deleted"
+        else:
+            self.delete.on_click(lambda _: on_delete(profile.name))
+
         super().__init__(children=[self.name, self.make_default, self.delete])
 
 
 class ProfileControlWidget(ipw.VBox):
     def __init__(self):
-        text = ipw.HTML(value="<h3> List of profiles </h3>")
-        children = [Profile(p) for p in manage.get_config().profiles]
-        super().__init__(children=[text, *children])
+        self._title = ipw.HTML(value="<h3> List of profiles </h3>")
+        self._status = ipw.HTML(value="")
+
+        self._confirm_target = None
+        self._confirm_warning = ipw.HTML(value="")
+        self._confirm_delete_storage = ipw.Checkbox(
+            description="Also delete all data of this profile (database and file repository)",
+            value=False,
+        )
+        self._confirm_button = ipw.Button(
+            description="Confirm delete", button_style="danger"
+        )
+        self._confirm_button.on_click(self._on_confirm_delete)
+        self._cancel_button = ipw.Button(description="Cancel")
+        self._cancel_button.on_click(self._on_cancel_delete)
+        self._confirm_box = ipw.VBox(
+            children=[
+                self._confirm_warning,
+                self._confirm_delete_storage,
+                ipw.HBox([self._confirm_button, self._cancel_button]),
+            ]
+        )
+        self._confirm_box.layout.display = "none"
+
+        self._rows_box = ipw.VBox()
+        self._refresh()
+
+        super().__init__(
+            children=[
+                self._title,
+                self._rows_box,
+                self._confirm_box,
+                self._status,
+            ]
+        )
+
+    def _refresh(self, _=None):
+        config = manage.get_config()
+        loaded_profile = get_profile()
+        loaded_profile_name = (
+            loaded_profile.name if loaded_profile is not None else None
+        )
+        rows = [
+            Profile(
+                p,
+                is_default=(p.name == config.default_profile_name),
+                is_loaded=(p.name == loaded_profile_name),
+                on_make_default=self._on_make_default,
+                on_delete=self._on_delete_clicked,
+            )
+            for p in config.profiles
+        ]
+        self._rows_box.children = rows
+
+    def _on_make_default(self, name):
+        try:
+            config = manage.get_config()
+            config.set_default_profile(name, overwrite=True)
+            config.store()
+        except Exception as exc:
+            self._status.value = f'<font color="red">Error: {exc}</font>'
+            return
+        self._status.value = (
+            f'<font color="green">Profile "{name}" is now the default.</font>'
+        )
+        self._refresh()
+
+    def _on_delete_clicked(self, name):
+        self._confirm_target = name
+        self._confirm_delete_storage.value = False
+        self._confirm_warning.value = (
+            f"You are about to delete profile <b>{name}</b>. This cannot be undone."
+        )
+        self._confirm_box.layout.display = ""
+
+    def _on_cancel_delete(self, _=None):
+        self._confirm_target = None
+        self._confirm_box.layout.display = "none"
+
+    def _on_confirm_delete(self, _=None):
+        name = self._confirm_target
+        if name is None:
+            return
+        delete_storage = self._confirm_delete_storage.value
+        try:
+            config = manage.get_config()
+            config.delete_profile(name, delete_storage=delete_storage)
+        except Exception as exc:
+            self._status.value = f'<font color="red">Error: {exc}</font>'
+        else:
+            self._status.value = f'<font color="green">Profile "{name}" deleted.</font>'
+        self._confirm_target = None
+        self._confirm_box.layout.display = "none"
+        self._refresh()
