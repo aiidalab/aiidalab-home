@@ -64,6 +64,9 @@ def get_start_widget(appbase, jupbase):
     </td>
     </tr>
     </table>
+    <a href="{appbase}/process_list.ipynb" title="List Processes" target="_blank">Process list</a>
+    |
+    <a href="{appbase}/code_setup.ipynb" title="Set up AiiDA codes" target="_blank">Code setup</a>
     </center>
 """
 

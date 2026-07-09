@@ -1,15 +1,15 @@
 """Module to generate AiiDAlab home page."""
 
 import json
-from functools import wraps
 from glob import glob
 from os import path
+from pathlib import Path
 
 import ipywidgets as ipw
 import traitlets
 from aiidalab.app import AiidaLabApp
 from aiidalab.config import AIIDALAB_APPS
-from IPython.display import display
+from markdown import Markdown
 
 from home.utils import load_widget
 from home.widgets import AppStatusInfoWidget
@@ -30,52 +30,27 @@ def create_app_widget_move_buttons(name):
     return app_widget_move_buttons
 
 
-def _workaround_property_lock_issue(func):
-    """Work-around for issue with the ipw.Accordion widget.
-
-    The widget does not report changes to the .selected_index trait when displayed
-    within a custom ipw.Output instance. However, the change is somewhat cryptic reported
-    by a change to the private '_property_lock' trait. We observe changes to that trait
-    and convert the change argument into a form that is more like the one expected by
-    downstream handlers.
-    """
-
-    @wraps(func)
-    def _inner(self, change):
-        if change["name"] == "_property_lock":
-            if "selected_index" in change["old"]:
-                fixed_change = change.copy()
-                fixed_change["name"] = "selected_index"
-                fixed_change["new"] = change["old"]["selected_index"]
-                del fixed_change["old"]
-                return func(self, fixed_change)
-
-        return func(self, change)
-
-    return _inner
-
-
 class AiidaLabHome:
-    """Class that mananges the appearance of the AiiDAlab home page."""
+    """Class that manages the appearance of the AiiDAlab home page."""
 
     def __init__(self):
         self.config_fn = ".launcher.json"
-        self.output = ipw.Output()
+        self.output = ipw.VBox()
         self._app_widgets = {}
 
     def _create_app_widget(self, name):
         """Create the widget representing the app on the home screen."""
         config = self.read_config()
         app = AiidaLabApp(name, None, AIIDALAB_APPS)
-
-        if name == "home":
-            app_widget = AppWidget(app, allow_move=False, allow_manage=False)
-        else:
-            app_widget = CollapsableAppWidget(app, allow_move=True)
-            app_widget.hidden = name in config["hidden"]
-            app_widget.observe(self._on_app_widget_change_hidden, names=["hidden"])
-
+        app_widget = CollapsableAppWidget(app, allow_move=True)
+        app_widget.hidden = name in config["hidden"]
+        app_widget.observe(self._on_app_widget_change_hidden, names=["hidden"])
         return app_widget
+
+    def _create_home_widget(self):
+        """Create the home app widget."""
+        app = AiidaLabApp("home", None, AIIDALAB_APPS)
+        return AppWidget(app, allow_move=False, allow_manage=False)
 
     def _on_app_widget_change_hidden(self, change):
         """Record whether a app widget is hidden on the home screen in the config file."""
@@ -98,16 +73,28 @@ class AiidaLabHome:
 
     def render(self):
         """Rendering all apps."""
-        self.output.clear_output()
+
+        home = self._create_home_widget()
+        children = [home]
+
+        config_dir = Path.home() / ".aiidalab"
+        warning_file = config_dir / "home_app_warning.md"
+
+        if warning_file.exists():
+            content = warning_file.read_text()
+            notification = self._create_notification(content)
+            children.append(notification)
+
         apps = self.load_apps()
 
-        with self.output:
-            for name in apps:
-                # Create app widget if it has not been created yet.
-                if name not in self._app_widgets:
-                    self._app_widgets[name] = self._create_app_widget(name)
+        for name in apps:
+            # Create app widget if it has not been created yet.
+            if name not in self._app_widgets:
+                self._app_widgets[name] = self._create_app_widget(name)
 
-                display(self._app_widgets[name])
+            children.append(self._app_widgets[name])
+
+        self.output.children = children
 
         return self.output
 
@@ -125,7 +112,7 @@ class AiidaLabHome:
         apps.sort(key=lambda x: order.index(x) if x in order else -1)
         config["order"] = apps
         self.write_config(config)
-        return ["home", *apps]
+        return apps
 
     def move_updown(self, name, delta):
         """Move the app up/down on the start page."""
@@ -138,6 +125,13 @@ class AiidaLabHome:
         config["order"] = order
         self.write_config(config)
 
+    def _create_notification(self, content):
+        md = Markdown()
+        html = md.convert(content)
+        notification_widget = ipw.HTML(html)
+        notification_widget.add_class("home-notification")
+        return notification_widget
+
 
 class AppWidget(ipw.VBox):
     """Widget that represents an app as part of the home page."""
@@ -146,7 +140,7 @@ class AppWidget(ipw.VBox):
         self.app = app
 
         launcher = load_widget(app.name)
-        launcher.layout = ipw.Layout(width="900px")
+        launcher.layout.flex = "1"  # fill available space
 
         header_items = []
         footer_items = []
@@ -155,7 +149,7 @@ class AppWidget(ipw.VBox):
             app_status_info = AppStatusInfoWidget()
             for trait in ("detached", "compatible", "remote_update_status"):
                 ipw.dlink((app, trait), (app_status_info, trait))
-            app_status_info.layout.margin = "0px 0px 0px 800px"
+            app_status_info.layout.margin = "0px 0px 0px auto"
             header_items.append(app_status_info)
 
             footer_items.append(
@@ -163,7 +157,7 @@ class AppWidget(ipw.VBox):
             )
             if app.metadata.get("external_url"):
                 footer_items.append(
-                    f"""<a href="{app.metadata['external_url']}" target="_blank"><button>URL</button></a>"""
+                    f"""<a href="{app.metadata["external_url"]}" target="_blank"><button>URL</button></a>"""
                 )
 
         if allow_move:
@@ -177,7 +171,7 @@ class AppWidget(ipw.VBox):
 
         footer = ipw.HTML(" ".join(footer_items), layout={"width": "initial"})
         footer.layout.margin = (
-            "0px 0px 0px 700px" if allow_manage else "0px 0px 20px 0px"
+            "0px 0px 0px auto" if allow_manage else "0px 0px 20px 0px"
         )
 
         super().__init__(children=[header, body, footer])
@@ -186,24 +180,17 @@ class AppWidget(ipw.VBox):
 class CollapsableAppWidget(ipw.Accordion):
     """Widget that represents a collapsable app as part of the home page."""
 
-    hidden = traitlets.Bool()
+    hidden = traitlets.Bool(None, allow_none=True)
 
     def __init__(self, app, **kwargs):
         self.app = app
         app_widget = AppWidget(app, **kwargs)
         super().__init__(children=[app_widget])
         self.set_title(0, app.title)
-        # Need to observe all names here due to unidentified issue:
-        self.observe(
-            self._observe_accordion_selected_index
-        )  # , names=['selected_index'])
 
-    @_workaround_property_lock_issue
+    @traitlets.observe("selected_index")
     def _observe_accordion_selected_index(self, change):
-        if (
-            change["name"] == "selected_index"
-        ):  # Observing all names due to unidentified issue.
-            self.hidden = change["new"] is None
+        self.hidden = change["new"] is None
 
     @traitlets.observe("hidden")
     def _observe_hidden(self, change):

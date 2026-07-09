@@ -54,3 +54,9 @@ def test_click_filemanager(selenium_driver, final_screenshot):
     selenium.find_element(By.LINK_TEXT, "Running").click()
     selenium.find_element(By.LINK_TEXT, "Clusters").click()
     selenium.find_element(By.LINK_TEXT, "Files").click()
+
+
+def test_process_list_link_on_start(selenium_driver, final_screenshot):
+    selenium = selenium_driver("start.ipynb")
+    process_link = selenium.find_element(By.LINK_TEXT, "Process list")
+    assert "process_list.ipynb" in process_link.get_attribute("href")

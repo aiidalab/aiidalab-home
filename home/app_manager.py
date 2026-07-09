@@ -7,7 +7,7 @@ import traitlets
 from aiidalab.app import AppRemoteUpdateStatus as AppStatus
 from aiidalab.app import AppVersion
 from jinja2 import Template
-from packaging.version import parse
+from packaging.version import InvalidVersion, parse
 
 from home.utils import load_logo
 from home.widgets import LogOutputWidget, Spinner, StatusHTML
@@ -123,17 +123,47 @@ class AppManagerWidget(ipw.VBox):
         </div>"""
     )
 
-    TEMPLATE = Template(
-        """<b> <div style="font-size: 30px; text-align:center;">{{ app.title }}</div></b>
-    <br>
-    <b>Authors:</b> {{ app.authors }}
-    <br>
-    <b>Description:</b> {{ app.description }}
-    {% if app.url and app.url.startswith("http") %}
-    <br>
-    <b>URL:</b> <a href="{{ app.url }}">{{ app.url }}</a>
-    {% endif %}"""
-    )
+    TEMPLATE = Template("""
+        <b><div style="font-size: 30px; text-align:center;">{{ app.title }}</div></b>
+        <br>
+        <b>Authors:</b> {{ app.authors }}
+        <br>
+        <b>Description:</b> {{ app.description }}
+        {% if app.url and app.url.startswith("http") %}
+            <br>
+            <b>URL:</b> <a href="{{ app.url }}">{{ app.url }}</a>
+        {% endif %}
+        <br>
+        {% if app.citations %}
+            <b>Citations:</b>
+            <br>
+            <ul>
+            {% for citation in app.citations %}
+                {% if citation.text %}
+                    {% if citation.link %}
+                        <a href="{{ citation.link }}" target="_blank" noreferrer noopener>{{ citation.text }}</a>
+                    {% else %}
+                        {{ citation.text }}
+                    {% endif %}
+                {% else %}
+                    {{ citation.authors | join(", ") }},
+                    {% if citation.title %}
+                        "{{ citation.title }}".
+                    {% endif %}
+                    <em>{{ citation.journal }}</em>
+                    {% if citation.volume %}
+                        , <b>{{ citation.volume }}</b>
+                    {% endif %}
+                    {% if citation.issue %}
+                        , {{ citation.issue }}
+                    {% endif %}
+                    ({{ citation.year }}).
+                    <a href="https://doi.org/{{ citation.doi }}" target="_blank" noreferrer noopener>https://doi.org/{{ citation.doi }}</a>
+                {% endif %}
+            {% endfor %}
+            </ul>
+        {% endif %}
+    """)
 
     def __init__(self, app, minimalistic=False):
         self.app = app
@@ -184,6 +214,13 @@ class AppManagerWidget(ipw.VBox):
                 (self._formatted_version(version), version) for version in versions
             ],
         )
+
+        ipw.dlink(
+            (self.app, "available_versions"),
+            (self.version_selector.version_to_install, "index"),
+            transform=lambda versions: 0 if versions else None,
+        )
+
         ipw.dlink(
             (self.app, "installed_version"),
             (self.version_selector.installed_version, "value"),
@@ -258,11 +295,14 @@ class AppManagerWidget(ipw.VBox):
         installed_version = app.installed_version
 
         has_prereleases = app.has_prereleases
-        prerelease_installed = (
-            parse(installed_version).is_prerelease
-            if isinstance(installed_version, str)
-            else False
-        )
+        prerelease_installed = False
+        if isinstance(installed_version, str):
+            try:
+                parsed_version = parse(installed_version)
+            except InvalidVersion:
+                pass
+            else:
+                prerelease_installed = parsed_version.is_prerelease
 
         with self.hold_trait_notifications():
             # The checkbox can only be enabled when the app has prereleases,

@@ -1,12 +1,12 @@
 ---
-# Run basic tests for this app on the latest aiidalab-docker image.
+# Run basic tests for this app on aiidalab/full-stack image (specific tag(s)).
 
 name: continuous-integration
 
 on:
     push:
         branches:
-            - master
+            - main
     pull_request:
 
 env:
@@ -25,6 +25,7 @@ jobs:
         strategy:
             matrix:
                 browser: [Chrome, Firefox]
+                docker-tag: ['2026.1029']
             fail-fast: false
 
         runs-on: ubuntu-latest
@@ -33,36 +34,63 @@ jobs:
         steps:
 
             - name: Check out app
-              uses: actions/checkout@v4
-
-            - name: Set up Python
-              uses: actions/setup-python@v5
-              with:
-                  python-version: '3.11'
+              uses: actions/checkout@v7
 
             - name: Setup uv
-              uses: astral-sh/setup-uv@v3
+              uses: astral-sh/setup-uv@v7
               with:
-                  version: 0.4.20
+                  python-version: '3.12'
+                  activate-environment: 'true'
 
             - name: Install package test dependencies
               # Notebook tests happen in the container, here we only need to install
               # the pytest-docker dependency. Unfortunately, uv/pip does not allow to
               # only install [dev] dependencies so we end up installing all the rest as well.
-              run: uv pip install --system .[dev]
+              run: uv pip install .[dev]
 
             - name: Set jupyter token env
               run: echo "JUPYTER_TOKEN=$(openssl rand -hex 32)" >> $GITHUB_ENV
 
             - name: Run pytest
-              run: pytest -v --driver ${{ matrix.browser }} tests_notebooks
+              run: pytest -v --driver ${{ matrix.browser }} tests_notebooks/
               env:
-                  TAG: edge
+                  TAG: ${{ matrix.docker-tag }}
 
             - name: Upload screenshots as artifacts
               if: always()
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
-                  name: Screenshots-${{ matrix.browser }}
+                  name: Screenshots-${{ matrix.docker-tag }}-${{ matrix.browser }}
                   path: screenshots/
                   if-no-files-found: error
+
+    test-package:
+
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        services:
+            rabbitmq:
+                image: rabbitmq:latest
+                ports:
+                    - 5672:5672
+
+        steps:
+
+            - name: Check out app
+              uses: actions/checkout@v7
+
+            - name: Set up Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: '3.11'
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v7
+              with:
+                  version: 0.4.20
+
+            - name: Install package test dependencies
+              run: uv pip install --system .[dev]
+
+            - name: Run pytest
+              run: pytest -v tests/
