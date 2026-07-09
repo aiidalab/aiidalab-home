@@ -1,9 +1,11 @@
 import subprocess
+import threading
 
 import ipywidgets as ipw
 import plumpy
 import traitlets as tr
 from aiida import engine, get_profile, manage
+from aiida.engine.daemon.client import DaemonException
 from IPython.display import clear_output
 
 from home import process
@@ -15,18 +17,18 @@ class DaemonControlWidget(ipw.VBox):
         self._status = ipw.Output()
 
         # Start daemon.
-        start_button = ipw.Button(description="Start daemon", button_style="info")
-        start_button.on_click(self._start_daemon)
+        self.start_button = ipw.Button(description="Start daemon", button_style="info")
+        self.start_button.on_click(self._start_daemon)
 
         # Stop daemon.
-        stop_button = ipw.Button(description="Stop daemon", button_style="danger")
-        stop_button.on_click(self._stop_daemon)
+        self.stop_button = ipw.Button(description="Stop daemon", button_style="danger")
+        self.stop_button.on_click(self._stop_daemon)
 
         # Restart daemon.
-        restart_button = ipw.Button(
+        self.restart_button = ipw.Button(
             description="Restart daemon", button_style="warning"
         )
-        restart_button.on_click(self._restart_daemon)
+        self.restart_button.on_click(self._restart_daemon)
 
         self.info = ipw.HTML()
         self._update_status()
@@ -34,33 +36,78 @@ class DaemonControlWidget(ipw.VBox):
             children=[
                 self.info,
                 self._status,
-                ipw.HBox([start_button, stop_button, restart_button]),
+                ipw.HBox([self.start_button, self.stop_button, self.restart_button]),
             ]
         )
 
-    def _restart_daemon(self, _=None):
-        self._clear_status()
-        self.info.value = "Restarting the daemon..."
-        response = self._daemon.restart_daemon()
-        self.info.value = ""
-        self._update_status()
-        return response
-
     def _start_daemon(self, _=None):
-        self._clear_status()
-        self.info.value = "Starting the daemon..."
-        response = self._daemon.start_daemon()
-        self.info.value = ""
-        self._update_status()
-        return response
+        if self._daemon.is_daemon_running:
+            self.info.value = "The daemon is already running."
+            return
+        self._run_action(
+            action_name="start",
+            action=self._daemon.start_daemon,
+            in_progress_message="Starting the daemon...",
+            success_message="The daemon has been started.",
+        )
 
     def _stop_daemon(self, _=None):
-        self._clear_status()
-        self.info.value = "Stopping the daemon..."
-        response = self._daemon.stop_daemon()
-        self.info.value = ""
-        self._update_status()
-        return response
+        if not self._daemon.is_daemon_running:
+            self.info.value = "The daemon is not running."
+            return
+        self._run_action(
+            action_name="stop",
+            action=self._daemon.stop_daemon,
+            in_progress_message="Stopping the daemon...",
+            success_message="The daemon has been stopped.",
+        )
+
+    def _restart_daemon(self, _=None):
+        self._run_action(
+            action_name="restart",
+            action=self._restart_with_fallback,
+            in_progress_message="Restarting the daemon...",
+            success_message="The daemon has been restarted.",
+        )
+
+    def _restart_with_fallback(self):
+        # restart_daemon() raises DaemonNotRunningException if the daemon is
+        # currently stopped, so fall back to starting it in that case.
+        try:
+            self._daemon.restart_daemon()
+        except DaemonException:
+            if self._daemon.is_daemon_running:
+                raise
+            self._daemon.start_daemon()
+
+    def _run_action(self, action_name, action, in_progress_message, success_message):
+        self.info.value = f"{in_progress_message} <i class='fa fa-spinner fa-spin'></i>"
+        self.start_button.disabled = True
+        self.stop_button.disabled = True
+        self.restart_button.disabled = True
+
+        def worker():
+            try:
+                action()
+            except DaemonException as exc:
+                self.info.value = (
+                    "<span style='color:red'>"
+                    f"Failed to {action_name} the daemon: {exc}</span>"
+                )
+            except Exception as exc:
+                self.info.value = (
+                    "<span style='color:red'>"
+                    f"Failed to {action_name} the daemon: {exc}</span>"
+                )
+            else:
+                self.info.value = f"<span style='color:green'>{success_message}</span>"
+            finally:
+                self._update_status()
+                self.start_button.disabled = False
+                self.stop_button.disabled = False
+                self.restart_button.disabled = False
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _update_status(self, _=None):
         self._clear_status()
