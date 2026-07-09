@@ -1,6 +1,8 @@
 import html
+import logging
 import os
 import shutil
+import subprocess
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +15,7 @@ import psutil
 import traitlets as tr
 from aiida import engine, get_profile, manage, orm
 from aiida.engine.daemon.client import DaemonException
+from sqlalchemy import text
 
 from home import process
 
@@ -457,6 +460,297 @@ class SystemResourcesWidget(ipw.VBox):
         self._last_updated.value = (
             f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
         )
+
+
+def _repository_path(profile) -> Path:
+    """Directory holding the profile's file repository.
+
+    For sqlite_dos this directory also holds the database file, since that
+    backend keeps both in a single directory.
+    """
+    backend = profile.storage_backend
+    config = profile.storage_config
+    if backend == "core.psql_dos":
+        return Path(config["repository_uri"].removeprefix("file://"))
+    if backend == "core.sqlite_dos":
+        return Path(config["filepath"])
+    raise ValueError(f"not available for backend {backend}")
+
+
+def _du_bytes(path) -> int:
+    """Size in bytes of `path`, computed with `du -sb`.
+
+    `du` is a fast, C implementation; `os.walk` is much slower on
+    object-store directories with many files. `du` can emit warnings about
+    transient files mid-scan and still exit nonzero, so the numeric stdout
+    is trusted even when the return code is nonzero.
+    """
+    if not Path(path).exists():
+        raise FileNotFoundError(f"{path} not available")
+    result = subprocess.run(
+        ["du", "-sb", str(path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    try:
+        return int(result.stdout.split()[0])
+    except (IndexError, ValueError) as exc:
+        raise RuntimeError(f"could not determine size of {path}") from exc
+
+
+def _database_size_bytes(storage) -> int:
+    """PostgreSQL database size in bytes (psql_dos only)."""
+    with storage.get_session() as session:
+        return session.execute(
+            text("SELECT pg_database_size(current_database())")
+        ).scalar()
+
+
+class _ListLogHandler(logging.Handler):
+    """Collects formatted log records so they can be shown to the user."""
+
+    def __init__(self):
+        super().__init__()
+        self.lines: list[str] = []
+        self.setFormatter(logging.Formatter("%(message)s"))
+
+    def emit(self, record):
+        self.lines.append(self.format(record))
+
+
+class StorageWidget(ipw.VBox):
+    """Breaks down disk usage for the loaded profile and runs storage maintenance."""
+
+    def __init__(self):
+        self._refreshing = False
+        self._maintaining = False
+
+        self.info = ipw.HTML()
+        self._table = ipw.HTML()
+        self.refresh_button = ipw.Button(description="Refresh")
+        self.refresh_button.on_click(self.refresh)
+        self._last_updated = ipw.HTML()
+
+        self._dry_run_checkbox = ipw.Checkbox(
+            description="Dry run (only report what would be done)", value=True
+        )
+        self._full_checkbox = ipw.Checkbox(
+            description=(
+                "Full maintenance (requires exclusive access; stop the daemon first)"
+            ),
+            value=False,
+        )
+        self._maintain_button = ipw.Button(
+            description="Run maintenance", button_style="warning"
+        )
+        self._maintain_button.on_click(self._on_maintain_clicked)
+        self._maintain_output = ipw.HTML()
+
+        super().__init__(
+            children=[
+                self.info,
+                self._table,
+                ipw.HBox([self.refresh_button, self._last_updated]),
+                ipw.HTML("<hr><h4>Maintenance</h4>"),
+                self._dry_run_checkbox,
+                self._full_checkbox,
+                self._maintain_button,
+                self._maintain_output,
+            ]
+        )
+        self.refresh()
+
+    @staticmethod
+    def _row(label, text, error=False):
+        color = "red" if error else "inherit"
+        return (
+            "<tr>"
+            f"<td style='padding:1px 8px;'><b>{html.escape(label)}</b></td>"
+            f"<td style='color:{color};padding:1px 8px;'>{html.escape(text)}</td>"
+            "</tr>"
+        )
+
+    def refresh(self, _=None):
+        if self._refreshing:
+            return
+        self._refreshing = True
+        self.info.value = (
+            "Refreshing storage breakdown... <i class='fa fa-spinner fa-spin'></i>"
+        )
+        self.refresh_button.disabled = True
+
+        def worker():
+            try:
+                self._update_table()
+            except Exception as exc:
+                self.info.value = (
+                    "<span style='color:red'>Failed to refresh storage "
+                    f"breakdown: {exc}</span>"
+                )
+            else:
+                self.info.value = (
+                    "<span style='color:green'>Storage breakdown refreshed.</span>"
+                )
+            finally:
+                # Re-enable the button before touching anything else: if a
+                # later step raises, the page must not be left with the
+                # button permanently disabled.
+                self.refresh_button.disabled = False
+                self._refreshing = False
+                self._last_updated.value = (
+                    f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
+                )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _update_table(self):
+        profile = aiida.get_profile()
+        rows = []
+
+        try:
+            repo_path = _repository_path(profile)
+            size = _du_bytes(repo_path)
+            rows.append(
+                self._row("File repository", f"{_format_bytes(size)} — {repo_path}")
+            )
+        except Exception as exc:
+            rows.append(self._row("File repository", str(exc), error=True))
+
+        try:
+            backend = profile.storage_backend
+            if backend == "core.psql_dos":
+                storage = manage.get_manager().get_profile_storage()
+                db_bytes = _database_size_bytes(storage)
+                rows.append(self._row("Database", _format_bytes(db_bytes)))
+            elif backend == "core.sqlite_dos":
+                rows.append(
+                    self._row("Database", "included in the repository directory")
+                )
+            else:
+                rows.append(
+                    self._row(
+                        "Database", f"not available for backend {backend}", error=True
+                    )
+                )
+        except Exception as exc:
+            rows.append(self._row("Database", str(exc), error=True))
+
+        try:
+            apps_dir = os.environ.get("AIIDALAB_APPS", "/project/apps")
+            size = _du_bytes(apps_dir)
+            rows.append(
+                self._row("Installed apps", f"{_format_bytes(size)} — {apps_dir}")
+            )
+        except Exception as exc:
+            rows.append(self._row("Installed apps", str(exc), error=True))
+
+        try:
+            used, total = _disk_status()
+            rows.append(
+                self._row(
+                    "Home filesystem",
+                    f"{_format_bytes(used)} used of {_format_bytes(total)}",
+                )
+            )
+        except Exception as exc:
+            rows.append(self._row("Home filesystem", str(exc), error=True))
+
+        self._table.value = (
+            f'<h4>Storage — profile "{html.escape(profile.name)}"</h4>'
+            "<table style='border-collapse:collapse;'>" + "".join(rows) + "</table>"
+        )
+
+    def _on_maintain_clicked(self, _=None):
+        if self._maintaining:
+            return
+        self._maintaining = True
+        self._maintain_button.disabled = True
+        self._dry_run_checkbox.disabled = True
+        self._full_checkbox.disabled = True
+        self._maintain_output.value = (
+            "Running maintenance... <i class='fa fa-spinner fa-spin'></i>"
+        )
+
+        full = self._full_checkbox.value
+        dry_run = self._dry_run_checkbox.value
+
+        def worker():
+            try:
+                daemon = engine.daemon.get_daemon_client()
+                if full and daemon.is_daemon_running:
+                    self._maintain_output.value = (
+                        "<span style='color:#b58900'>Full maintenance requires "
+                        "exclusive access to the profile. Stop the daemon first "
+                        "(see the Daemon section) and try again.</span>"
+                    )
+                    return
+
+                profile = aiida.get_profile()
+                storage = manage.get_manager().get_profile_storage()
+
+                before = None
+                if not dry_run:
+                    try:
+                        before = _du_bytes(_repository_path(profile))
+                    except Exception:
+                        before = None
+
+                handler = _ListLogHandler()
+                handler.setLevel(logging.INFO)
+                logger = logging.getLogger("aiida.storage")
+                previous_level = logger.level
+                logger.setLevel(logging.INFO)
+                logger.addHandler(handler)
+                try:
+                    storage.maintain(full=full, dry_run=dry_run)
+                finally:
+                    logger.removeHandler(handler)
+                    logger.setLevel(previous_level)
+
+                log_html = (
+                    "<br>".join(html.escape(line) for line in handler.lines)
+                    if handler.lines
+                    else "(no log output)"
+                )
+
+                if not dry_run and before is not None:
+                    try:
+                        after = _du_bytes(_repository_path(profile))
+                        diff = before - after
+                        if diff > 0:
+                            log_html += f"<br><b>Reclaimed {_format_bytes(diff)}.</b>"
+                        else:
+                            log_html += "<br><b>No change in repository size.</b>"
+                    except Exception:
+                        pass
+
+                self._maintain_output.value = (
+                    "<span style='color:green'>Maintenance finished.</span><br>"
+                    f"{log_html}"
+                )
+            except Exception as exc:
+                self._maintain_output.value = (
+                    f"<span style='color:red'>Maintenance failed: "
+                    f"{html.escape(str(exc))}</span>"
+                )
+            finally:
+                # Re-enable the controls before refreshing the table: if the
+                # refresh raises, the page must not be left with the
+                # controls permanently disabled.
+                self._maintain_button.disabled = False
+                self._dry_run_checkbox.disabled = False
+                self._full_checkbox.disabled = False
+                self._maintaining = False
+                try:
+                    self.refresh()
+                except Exception as exc:
+                    self._maintain_output.value += (
+                        "<br><span style='color:red'>"
+                        f"Failed to refresh the storage breakdown: {exc}</span>"
+                    )
+
+        threading.Thread(target=worker, daemon=True).start()
 
 
 class ProcessControlWidget(ipw.VBox):
