@@ -5,6 +5,7 @@ import ipywidgets as ipw
 import plumpy
 import traitlets as tr
 from aiida import engine, manage
+from home import process
 from IPython.display import clear_output
 
 
@@ -84,7 +85,7 @@ class DaemonControlWidget(ipw.VBox):
 
 class ProcessControlWidget(ipw.VBox):
     def __init__(self):
-        process_list = awb.ProcessListWidget(path_to_root="../")
+        process_list = process.ProcessListWidget(path_to_root="../")
         past_days_widget = ipw.IntText(value=7, description="Past days:")
         tr.link((past_days_widget, "value"), (process_list, "past_days"))
 
