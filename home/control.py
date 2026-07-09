@@ -1,12 +1,12 @@
 import subprocess
 
-import aiidalab_widgets_base as awb
 import ipywidgets as ipw
 import plumpy
 import traitlets as tr
 from aiida import engine, manage
-from home import process
 from IPython.display import clear_output
+
+from home import process
 
 
 class DaemonControlWidget(ipw.VBox):
