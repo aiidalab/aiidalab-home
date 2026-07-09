@@ -117,9 +117,18 @@ class DaemonControlWidget(ipw.VBox):
             else:
                 self.info.value = f"<span style='color:green'>{success_message}</span>"
             finally:
-                self._update_status()
+                # Re-enable the buttons before refreshing the status: if the
+                # refresh raises, the page must not be left with all buttons
+                # permanently disabled.
                 for button in self._action_buttons:
                     button.disabled = False
+                try:
+                    self._update_status()
+                except Exception as exc:
+                    self.info.value += (
+                        "<br><span style='color:red'>"
+                        f"Failed to refresh the status: {exc}</span>"
+                    )
 
         threading.Thread(target=worker, daemon=True).start()
 
