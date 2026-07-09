@@ -1,11 +1,15 @@
 import html
+import os
+import shutil
 import threading
 from datetime import datetime
+from pathlib import Path
 from typing import ClassVar
 
 import aiida
 import ipywidgets as ipw
 import plumpy
+import psutil
 import traitlets as tr
 from aiida import engine, get_profile, manage, orm
 from aiida.engine.daemon.client import DaemonException
@@ -278,6 +282,180 @@ class StatusOverviewWidget(ipw.VBox):
 
         self._status.value = (
             "<table style='border-collapse:collapse;'>" + "".join(rows) + "</table>"
+        )
+
+
+_CGROUP_DIR = Path("/sys/fs/cgroup")  # module constant so tests can monkeypatch
+
+
+def _read_cgroup_int(filename) -> int | None:
+    """Value of a cgroup v2 file, or None if missing or 'max' (i.e. unlimited)."""
+    try:
+        text = (_CGROUP_DIR / filename).read_text().strip()
+    except OSError:
+        return None
+    if text == "max":
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
+def _format_bytes(n) -> str:
+    """Human-readable binary size, e.g. '3.4 GiB'."""
+    value = float(n)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if value < 1024 or unit == "TiB":
+            return f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} TiB"
+
+
+def _memory_status() -> tuple[int, int, bool]:
+    """(used_bytes, total_bytes, limited).
+
+    used = memory.current - inactive_file (docker stats convention; falls back
+    to memory.current if memory.stat is unreadable). total = memory.max when
+    limited, else psutil.virtual_memory().total (host total). If even
+    memory.current is unavailable (not in a cgroup v2 container), falls back
+    entirely to psutil: (vm.total - vm.available, vm.total, False).
+    """
+    current = _read_cgroup_int("memory.current")
+    if current is None:
+        vm = psutil.virtual_memory()
+        return vm.total - vm.available, vm.total, False
+
+    inactive_file = None
+    try:
+        for line in (_CGROUP_DIR / "memory.stat").read_text().splitlines():
+            key, _, value = line.partition(" ")
+            if key == "inactive_file":
+                inactive_file = int(value)
+                break
+    except (OSError, ValueError):
+        inactive_file = None
+
+    used = current - inactive_file if inactive_file is not None else current
+
+    limit = _read_cgroup_int("memory.max")
+    if limit is not None:
+        return used, limit, True
+    return used, psutil.virtual_memory().total, False
+
+
+def _cpu_status() -> tuple[float, float]:
+    """(load_1min, effective_cpus). effective_cpus from cpu.max quota/period
+    when limited, else os.cpu_count()."""
+    load_1min = os.getloadavg()[0]
+
+    try:
+        quota_str, period_str = (_CGROUP_DIR / "cpu.max").read_text().split()
+    except OSError:
+        quota_str, period_str = "max", "100000"
+
+    effective_cpus = None
+    if quota_str != "max":
+        try:
+            effective_cpus = int(quota_str) / int(period_str)
+        except (ValueError, ZeroDivisionError):
+            effective_cpus = None
+
+    if effective_cpus is None:
+        effective_cpus = float(os.cpu_count() or 1)
+
+    return load_1min, effective_cpus
+
+
+def _disk_status() -> tuple[int, int]:
+    """(used_bytes, total_bytes) for the filesystem hosting Path.home()."""
+    usage = shutil.disk_usage(Path.home())
+    return usage.used, usage.total
+
+
+def _safe_fraction(used, total) -> float:
+    """used / total, or raise if total is zero/None (row is then unavailable)."""
+    if not total:
+        raise ValueError("unavailable")
+    return used / total
+
+
+class SystemResourcesWidget(ipw.VBox):
+    _THRESHOLDS: ClassVar[tuple] = ((0.75, "success"), (0.90, "warning"))
+
+    def __init__(self):
+        self._memory_bar = ipw.FloatProgress(min=0, max=1, description="Memory:")
+        self._memory_label = ipw.HTML()
+        self._cpu_bar = ipw.FloatProgress(min=0, max=1, description="CPU load:")
+        self._cpu_label = ipw.HTML()
+        self._disk_bar = ipw.FloatProgress(min=0, max=1, description="Disk:")
+        self._disk_label = ipw.HTML()
+
+        self.refresh_button = ipw.Button(description="Refresh")
+        self.refresh_button.on_click(self.refresh)
+        self._last_updated = ipw.HTML()
+
+        super().__init__(
+            children=[
+                ipw.HBox([self._memory_bar, self._memory_label]),
+                ipw.HBox([self._cpu_bar, self._cpu_label]),
+                ipw.HBox([self._disk_bar, self._disk_label]),
+                ipw.HBox([self.refresh_button, self._last_updated]),
+            ]
+        )
+        self.refresh()
+
+    @classmethod
+    def _bar_style(cls, fraction):
+        for threshold, style in cls._THRESHOLDS:
+            if fraction < threshold:
+                return style
+        return "danger"
+
+    def _set_row(self, bar, label, fraction, text):
+        bar.value = max(0.0, min(1.0, fraction))
+        bar.bar_style = self._bar_style(bar.value)
+        label.value = text
+
+    def _set_row_error(self, bar, label, exc):
+        bar.value = 0
+        bar.bar_style = "danger"
+        label.value = f"<span style='color:red'>{html.escape(str(exc))}</span>"
+
+    def refresh(self, _=None):
+        try:
+            used, total, limited = _memory_status()
+            fraction = _safe_fraction(used, total)
+            suffix = "" if limited else " — no container limit, showing host total"
+            text = (
+                f"{_format_bytes(used)} / {_format_bytes(total)} "
+                f"({fraction:.0%}){suffix}"
+            )
+            self._set_row(self._memory_bar, self._memory_label, fraction, text)
+        except Exception as exc:
+            self._set_row_error(self._memory_bar, self._memory_label, exc)
+
+        try:
+            load_1min, cpus = _cpu_status()
+            fraction = _safe_fraction(load_1min, cpus)
+            text = f"load {load_1min:.2f} / {cpus:.0f} CPUs ({fraction:.0%})"
+            self._set_row(self._cpu_bar, self._cpu_label, fraction, text)
+        except Exception as exc:
+            self._set_row_error(self._cpu_bar, self._cpu_label, exc)
+
+        try:
+            used, total = _disk_status()
+            fraction = _safe_fraction(used, total)
+            text = (
+                f"{_format_bytes(used)} / {_format_bytes(total)} "
+                f"({fraction:.0%}) — {Path.home()}"
+            )
+            self._set_row(self._disk_bar, self._disk_label, fraction, text)
+        except Exception as exc:
+            self._set_row_error(self._disk_bar, self._disk_label, exc)
+
+        self._last_updated.value = (
+            f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
         )
 
 
