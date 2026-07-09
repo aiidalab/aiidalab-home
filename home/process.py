@@ -640,54 +640,59 @@ class ProcessListWidget(ipw.VBox):
 
     def update(self, _=None):
         """Perform the query."""
-        builder = CalculationQueryBuilder()
-        filters = builder.get_filters(
-            all_entries=False,
-            process_state=self.process_states,
-            process_label=self.process_label,
-            exit_status=None,
-            failed=None,
-        )
-        relationships = {}
-        if self.incoming_node:
-            relationships = {
-                **relationships,
-                **{"with_outgoing": orm.load_node(self.incoming_node)},
-            }
+        try:
+            builder = CalculationQueryBuilder()
+            filters = builder.get_filters(
+                all_entries=False,
+                process_state=self.process_states,
+                process_label=self.process_label,
+                exit_status=None,
+                failed=None,
+            )
+            relationships = {}
+            if self.incoming_node:
+                relationships = {
+                    **relationships,
+                    **{"with_outgoing": orm.load_node(self.incoming_node)},
+                }
 
-        if self.outgoing_node:
-            relationships = {
-                **relationships,
-                **{"with_incoming": orm.load_node(self.outgoing_node)},
-            }
+            if self.outgoing_node:
+                relationships = {
+                    **relationships,
+                    **{"with_incoming": orm.load_node(self.outgoing_node)},
+                }
 
-        query_set = builder.get_query_set(
-            filters=filters,
-            past_days=None if self.past_days < 0 else self.past_days,
-            order_by={"ctime": "desc"},
-            relationships=relationships,
-        )
-        projected = builder.get_projected(
-            query_set,
-            projections=[
-                "pk",
-                "ctime",
-                "process_label",
-                "state",
-                "process_status",
-                "description",
-            ],
-        )
-        headers, rows = _normalize_process_rows(projected)
+            query_set = builder.get_query_set(
+                filters=filters,
+                past_days=None if self.past_days < 0 else self.past_days,
+                order_by={"ctime": "desc"},
+                relationships=relationships,
+            )
+            projected = builder.get_projected(
+                query_set,
+                projections=[
+                    "pk",
+                    "ctime",
+                    "process_label",
+                    "state",
+                    "process_status",
+                    "description",
+                ],
+            )
+            headers, rows = _normalize_process_rows(projected)
 
-        # Keep only process that contain the requested string in the description.
-        rows = _filter_process_rows(rows, self.description_contains)
+            # Keep only process that contain the requested string in the description.
+            rows = _filter_process_rows(rows, self.description_contains)
 
-        self.output.value = f"{len(rows)} processes shown"
+            self.output.value = f"{len(rows)} processes shown"
 
-        # Add HTML links.
-        rows = _add_process_links(rows, self.path_to_root)
-        self.table.value = _render_process_table(headers, rows)
+            # Add HTML links.
+            rows = _add_process_links(rows, self.path_to_root)
+            self.table.value = _render_process_table(headers, rows)
+        except Exception as exc:
+            self.output.value = (
+                f'<span style="color:red">Failed to update process list: {exc}</span>'
+            )
 
     @tl.validate("incoming_node")
     def _validate_incoming_node(self, provided):
