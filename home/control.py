@@ -30,28 +30,119 @@ _FACTORY_RESET_FILE = (
 )  # module constant so tests can monkeypatch
 
 
-def _daemon_status(client) -> tuple:
-    """Probe the daemon and return an (state, text) status pair."""
+def _probe_daemon(client) -> tuple:
+    """Probe the daemon and return an (state, text, info) tuple.
+
+    `info` is the raw `get_worker_info()` return value, or None if the
+    daemon is not running (or it stopped between the check and the call).
+    """
     try:
-        state, text = "warning", "Daemon is not running"
+        state, text, info = "warning", "Daemon is not running", None
         # get_worker_info() blocks for the client timeout when the daemon
         # is down, so only call it after confirming the daemon is running.
         if client.is_daemon_running:
             try:
-                workers = len(client.get_worker_info().get("info", []))
+                info = client.get_worker_info()
+                workers = len(info.get("info", {}))
                 state, text = "ok", f"Daemon is running with {workers} worker(s)"
             except DaemonException:
-                pass  # The daemon stopped between the check and the call.
+                info = None  # The daemon stopped between the check and the call.
     except Exception as exc:
-        return "error", str(exc)
+        return "error", str(exc), None
     else:
-        return state, text
+        return state, text, info
+
+
+def _daemon_status(client) -> tuple:
+    """Probe the daemon and return an (state, text) status pair."""
+    state, text, _info = _probe_daemon(client)
+    return state, text
+
+
+def _humanize_age(seconds) -> str:
+    """Humanize a duration in seconds, e.g. 100905.8 -> '1d 4h'."""
+    try:
+        seconds = int(seconds)
+    except (TypeError, ValueError):
+        return "?"
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, seconds = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m"
+    hours, minutes = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours}h {minutes}m"
+    days, hours = divmod(hours, 24)
+    return f"{days}d {hours}h"
+
+
+def _worker_table_html(info) -> str:
+    """Table of per-worker stats from `get_worker_info()`, or '' if none."""
+    workers = info.get("info") if info else None
+    if not workers:
+        return ""
+
+    def _fmt_pct(value):
+        return f"{value:.1f}%" if isinstance(value, (int, float)) else "?"
+
+    header = (
+        "<tr>"
+        "<th style='padding:1px 8px;text-align:left;'>Worker</th>"
+        "<th style='padding:1px 8px;text-align:left;'>PID</th>"
+        "<th style='padding:1px 8px;text-align:left;'>CPU</th>"
+        "<th style='padding:1px 8px;text-align:left;'>Memory</th>"
+        "<th style='padding:1px 8px;text-align:left;'>RSS</th>"
+        "<th style='padding:1px 8px;text-align:left;'>Uptime</th>"
+        "</tr>"
+    )
+    rows = []
+    for worker in workers.values():
+        cells = [
+            str(worker.get("wid", "?")),
+            str(worker.get("pid", "?")),
+            _fmt_pct(worker.get("cpu")),
+            _fmt_pct(worker.get("mem")),
+            str(worker.get("mem_info1", "?")),
+            _humanize_age(worker.get("age")),
+        ]
+        rows.append(
+            "<tr>"
+            + "".join(
+                f"<td style='padding:1px 8px;'>{html.escape(cell)}</td>"
+                for cell in cells
+            )
+            + "</tr>"
+        )
+    return (
+        "<table style='border-collapse:collapse;'>"
+        + header
+        + "".join(rows)
+        + "</table>"
+    )
+
+
+def _read_log_tail(path, lines=50) -> str:
+    """Last `lines` lines of the file at `path`, without reading it whole."""
+    log_path = Path(path)
+    if not log_path.exists():
+        return "Log file not found"
+    size = log_path.stat().st_size
+    if size == 0:
+        return "(log is empty)"
+    with log_path.open("rb") as f:
+        f.seek(max(0, size - 65536))
+        data = f.read()
+    return "\n".join(data.decode(errors="replace").splitlines()[-lines:])
 
 
 class DaemonControlWidget(ipw.VBox):
+    _LOG_TAIL_LINES = 50
+
     def __init__(self):
         self._daemon = engine.daemon.get_daemon_client()
         self._status = ipw.HTML()
+        self._worker_table = ipw.HTML()
 
         # Start daemon.
         self.start_button = ipw.Button(description="Start daemon", button_style="info")
@@ -67,6 +158,14 @@ class DaemonControlWidget(ipw.VBox):
         )
         self.restart_button.on_click(self._restart_daemon)
 
+        # Add/remove workers.
+        self.add_worker_button = ipw.Button(description="Add worker", icon="plus")
+        self.add_worker_button.on_click(self._add_worker)
+        self.remove_worker_button = ipw.Button(
+            description="Remove worker", icon="minus"
+        )
+        self.remove_worker_button.on_click(self._remove_worker)
+
         # Refresh status.
         self.refresh_button = ipw.Button(description="Refresh")
         self.refresh_button.on_click(self._refresh_status)
@@ -75,8 +174,22 @@ class DaemonControlWidget(ipw.VBox):
             self.start_button,
             self.stop_button,
             self.restart_button,
+            self.add_worker_button,
+            self.remove_worker_button,
             self.refresh_button,
         ]
+
+        # Daemon log viewer.
+        self._log_content = ipw.HTML()
+        self.reload_log_button = ipw.Button(description="Reload log")
+        self.reload_log_button.on_click(self._reload_log)
+        self._log_accordion = ipw.Accordion(
+            children=[ipw.VBox([self._log_content, self.reload_log_button])],
+            selected_index=None,
+        )
+        self._log_accordion.set_title(
+            0, f"Daemon log ({Path(self._daemon.daemon_log_file).name})"
+        )
 
         self.info = ipw.HTML()
         self._update_status()
@@ -84,7 +197,9 @@ class DaemonControlWidget(ipw.VBox):
             children=[
                 self.info,
                 self._status,
+                self._worker_table,
                 ipw.HBox(self._action_buttons),
+                self._log_accordion,
             ]
         )
 
@@ -118,6 +233,37 @@ class DaemonControlWidget(ipw.VBox):
             success_message="The daemon has been restarted.",
         )
 
+    def _add_worker(self, _=None):
+        if not self._daemon.is_daemon_running:
+            self.info.value = "The daemon is not running."
+            return
+        self._run_action(
+            action_name="add a worker",
+            action=lambda: self._daemon.increase_workers(1),
+            in_progress_message="Adding a worker...",
+            success_message="A worker has been added.",
+        )
+
+    def _remove_worker(self, _=None):
+        if not self._daemon.is_daemon_running:
+            self.info.value = "The daemon is not running."
+            return
+        # The button's disabled state can be stale, so re-check the live
+        # worker count before actually removing one.
+        try:
+            worker_count = self._daemon.get_number_of_workers()
+        except DaemonException:
+            worker_count = 0
+        if worker_count <= 1:
+            self.info.value = "At least one worker is required."
+            return
+        self._run_action(
+            action_name="remove a worker",
+            action=lambda: self._daemon.decrease_workers(1),
+            in_progress_message="Removing a worker...",
+            success_message="A worker has been removed.",
+        )
+
     def _refresh_status(self, _=None):
         # The actual refresh happens in _run_action's finally block, which
         # already updates the status after every action.
@@ -127,6 +273,10 @@ class DaemonControlWidget(ipw.VBox):
             in_progress_message="Refreshing the status...",
             success_message="Status refreshed.",
         )
+
+    def refresh(self, _=None):
+        """Public entry point used when a cached tab is re-activated."""
+        self._refresh_status()
 
     def _restart_with_fallback(self):
         # restart_daemon() raises DaemonNotRunningException if the daemon is
@@ -168,10 +318,50 @@ class DaemonControlWidget(ipw.VBox):
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _reload_log(self, _=None):
+        try:
+            tail = _read_log_tail(self._daemon.daemon_log_file, self._LOG_TAIL_LINES)
+            self._log_content.value = (
+                "<pre style='max-height:300px;overflow:auto;font-size:12px;'>"
+                f"{html.escape(tail)}</pre>"
+            )
+        except Exception as exc:
+            self._log_content.value = (
+                f"<span style='color:red'>Failed to read the log: "
+                f"{html.escape(str(exc))}</span>"
+            )
+
     def _update_status(self, _=None):
-        state, text = _daemon_status(self._daemon)
+        state, text, info = _probe_daemon(self._daemon)
         color = _DAEMON_LINE_COLORS[state]
-        self._status.value = f"<span style='color:{color}'>{html.escape(text)}</span>"
+        status_html = f"<span style='color:{color}'>{html.escape(text)}</span>"
+
+        running = state == "ok"
+        worker_count = len(info.get("info", {})) if info else 0
+        cpu_count = os.cpu_count() or 1
+        if running and worker_count > cpu_count:
+            status_html += (
+                " <span style='color:#b58900'>"
+                f"(exceeds {cpu_count} available CPU(s))</span>"
+            )
+        self._status.value = status_html
+
+        self.add_worker_button.disabled = not running
+        self.add_worker_button.tooltip = "" if running else "The daemon is not running"
+        if not running:
+            self.remove_worker_button.disabled = True
+            self.remove_worker_button.tooltip = "The daemon is not running"
+        elif worker_count <= 1:
+            self.remove_worker_button.disabled = True
+            self.remove_worker_button.tooltip = "At least one worker is required"
+        else:
+            self.remove_worker_button.disabled = False
+            self.remove_worker_button.tooltip = ""
+
+        self._worker_table.value = _worker_table_html(info)
+
+        if self._log_accordion.selected_index == 0:
+            self._reload_log()
 
 
 class StatusOverviewWidget(ipw.VBox):
