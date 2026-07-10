@@ -32,6 +32,82 @@ _FACTORY_RESET_FILE = (
 )  # module constant so tests can monkeypatch
 
 
+class ControlSectionWidget(ipw.VBox):
+    """Shared anatomy for a control-page tab: title, description, body, footer.
+
+    The footer (refresh button, "Last updated" label, transient feedback) and
+    the threaded refresh-with-guard pattern are common to every section, so
+    they live here; subclasses only provide a body and a `_do_refresh()`.
+    """
+
+    title = ""
+    description = ""
+
+    def __init__(self, body_children):
+        self._refreshing = False
+
+        header_children = [ipw.HTML(f"<h3>{html.escape(self.title)}</h3>")]
+        if self.description:
+            header_children.append(
+                ipw.HTML(
+                    f"<small style='color:gray'>{html.escape(self.description)}</small>"
+                )
+            )
+
+        self.refresh_button = ipw.Button(description="Refresh")
+        self.refresh_button.on_click(self.refresh)
+        self._last_updated = ipw.HTML()
+        self.info = ipw.HTML()
+        footer = ipw.HBox([self.refresh_button, self._last_updated, self.info])
+
+        super().__init__(
+            children=[*header_children, *body_children, footer],
+        )
+
+    def show_success(self, text):
+        self.info.value = f"<span style='color:green'>{html.escape(text)}</span>"
+
+    def show_warning(self, text):
+        self.info.value = f"<span style='color:#b58900'>{html.escape(text)}</span>"
+
+    def show_error(self, text):
+        self.info.value = f"<span style='color:red'>{html.escape(text)}</span>"
+
+    def show_plain(self, text):
+        self.info.value = html.escape(text)
+
+    def refresh(self, _=None):
+        if self._refreshing:
+            return
+        self._refreshing = True
+        self.info.value = "Refreshing... <i class='fa fa-spinner fa-spin'></i>"
+        self.refresh_button.disabled = True
+
+        def worker():
+            try:
+                self._do_refresh()
+            except Exception as exc:
+                self.show_error(f"Failed to refresh: {exc}")
+            else:
+                # Silent success: the "Last updated" timestamp below already
+                # signals success, so no "refreshed" message is shown.
+                self.info.value = ""
+            finally:
+                # Re-enable the button before touching anything else: if a
+                # later step raises, the page must not be left with the
+                # button permanently disabled.
+                self.refresh_button.disabled = False
+                self._refreshing = False
+                self._last_updated.value = (
+                    f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
+                )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _do_refresh(self):
+        """Synchronous probe/update; subclasses override."""
+
+
 def _probe_daemon(client) -> tuple:
     """Probe the daemon and return an (state, text, info) tuple.
 
@@ -138,7 +214,9 @@ def _read_log_tail(path, lines=50) -> str:
     return "\n".join(data.decode(errors="replace").splitlines()[-lines:])
 
 
-class DaemonControlWidget(ipw.VBox):
+class DaemonControlWidget(ControlSectionWidget):
+    title = "Daemon"
+    description = "The daemon runs your AiiDA processes in the background."
     _LOG_TAIL_LINES = 50
 
     def __init__(self):
@@ -168,19 +246,6 @@ class DaemonControlWidget(ipw.VBox):
         )
         self.remove_worker_button.on_click(self._remove_worker)
 
-        # Refresh status.
-        self.refresh_button = ipw.Button(description="Refresh")
-        self.refresh_button.on_click(self._refresh_status)
-
-        self._action_buttons = [
-            self.start_button,
-            self.stop_button,
-            self.restart_button,
-            self.add_worker_button,
-            self.remove_worker_button,
-            self.refresh_button,
-        ]
-
         # Daemon log viewer.
         self._log_content = ipw.HTML()
         self.reload_log_button = ipw.Button(description="Reload log")
@@ -193,21 +258,38 @@ class DaemonControlWidget(ipw.VBox):
             0, f"Daemon log ({Path(self._daemon.daemon_log_file).name})"
         )
 
-        self.info = ipw.HTML()
-        self._update_status()
         super().__init__(
-            children=[
-                self.info,
+            body_children=[
                 self._status,
                 self._worker_table,
-                ipw.HBox(self._action_buttons),
+                ipw.HBox(
+                    [
+                        self.start_button,
+                        self.stop_button,
+                        self.restart_button,
+                        self.add_worker_button,
+                        self.remove_worker_button,
+                    ]
+                ),
                 self._log_accordion,
             ]
         )
 
+        # The refresh button also disables while an action runs.
+        self._action_buttons = [
+            self.start_button,
+            self.stop_button,
+            self.restart_button,
+            self.add_worker_button,
+            self.remove_worker_button,
+            self.refresh_button,
+        ]
+
+        self._update_status()
+
     def _start_daemon(self, _=None):
         if self._daemon.is_daemon_running:
-            self.info.value = "The daemon is already running."
+            self.show_warning("The daemon is already running.")
             return
         self._run_action(
             action_name="start the daemon",
@@ -218,7 +300,7 @@ class DaemonControlWidget(ipw.VBox):
 
     def _stop_daemon(self, _=None):
         if not self._daemon.is_daemon_running:
-            self.info.value = "The daemon is not running."
+            self.show_warning("The daemon is not running.")
             return
         self._run_action(
             action_name="stop the daemon",
@@ -237,7 +319,7 @@ class DaemonControlWidget(ipw.VBox):
 
     def _add_worker(self, _=None):
         if not self._daemon.is_daemon_running:
-            self.info.value = "The daemon is not running."
+            self.show_warning("The daemon is not running.")
             return
         self._run_action(
             action_name="add a worker",
@@ -248,7 +330,7 @@ class DaemonControlWidget(ipw.VBox):
 
     def _remove_worker(self, _=None):
         if not self._daemon.is_daemon_running:
-            self.info.value = "The daemon is not running."
+            self.show_warning("The daemon is not running.")
             return
         # The button's disabled state can be stale, so re-check the live
         # worker count before actually removing one.
@@ -257,7 +339,7 @@ class DaemonControlWidget(ipw.VBox):
         except DaemonException:
             worker_count = 0
         if worker_count <= 1:
-            self.info.value = "At least one worker is required."
+            self.show_warning("At least one worker is required.")
             return
         self._run_action(
             action_name="remove a worker",
@@ -266,19 +348,8 @@ class DaemonControlWidget(ipw.VBox):
             success_message="A worker has been removed.",
         )
 
-    def _refresh_status(self, _=None):
-        # The actual refresh happens in _run_action's finally block, which
-        # already updates the status after every action.
-        self._run_action(
-            action_name="refresh the status",
-            action=lambda: None,
-            in_progress_message="Refreshing the status...",
-            success_message="Status refreshed.",
-        )
-
-    def refresh(self, _=None):
-        """Public entry point used when a cached tab is re-activated."""
-        self._refresh_status()
+    def _do_refresh(self):
+        self._update_status()
 
     def _restart_with_fallback(self):
         # restart_daemon() raises DaemonNotRunningException if the daemon is
@@ -299,11 +370,9 @@ class DaemonControlWidget(ipw.VBox):
             try:
                 action()
             except Exception as exc:
-                self.info.value = (
-                    f"<span style='color:red'>Failed to {action_name}: {exc}</span>"
-                )
+                self.show_error(f"Failed to {action_name}: {exc}")
             else:
-                self.info.value = f"<span style='color:green'>{success_message}</span>"
+                self.show_success(success_message)
             finally:
                 # Re-enable the buttons before refreshing the status: if the
                 # refresh raises, the page must not be left with all buttons
@@ -315,7 +384,7 @@ class DaemonControlWidget(ipw.VBox):
                 except Exception as exc:
                     self.info.value += (
                         "<br><span style='color:red'>"
-                        f"Failed to refresh the status: {exc}</span>"
+                        f"Failed to refresh the status: {html.escape(str(exc))}</span>"
                     )
 
         threading.Thread(target=worker, daemon=True).start()
@@ -366,7 +435,9 @@ class DaemonControlWidget(ipw.VBox):
             self._reload_log()
 
 
-class StatusOverviewWidget(ipw.VBox):
+class StatusOverviewWidget(ControlSectionWidget):
+    title = "Status"
+    description = "Health of the services behind AiiDA."
     _ROW_STYLES: ClassVar[dict] = {
         "ok": ("green", "&#10003;"),
         "error": ("red", "&#10007;"),
@@ -375,21 +446,9 @@ class StatusOverviewWidget(ipw.VBox):
 
     def __init__(self):
         self._daemon = engine.daemon.get_daemon_client()
-        self._refreshing = False
-
-        self.info = ipw.HTML()
         self._status = ipw.HTML()
-        self.refresh_button = ipw.Button(description="Refresh")
-        self.refresh_button.on_click(self.refresh)
-        self._last_updated = ipw.HTML()
 
-        super().__init__(
-            children=[
-                self.info,
-                self._status,
-                ipw.HBox([self.refresh_button, self._last_updated]),
-            ]
-        )
+        super().__init__(body_children=[self._status])
         self.refresh()
 
     @classmethod
@@ -404,35 +463,7 @@ class StatusOverviewWidget(ipw.VBox):
             f"</tr>"
         )
 
-    def refresh(self, _=None):
-        if self._refreshing:
-            return
-        self._refreshing = True
-        self.info.value = "Refreshing status... <i class='fa fa-spinner fa-spin'></i>"
-        self.refresh_button.disabled = True
-
-        def worker():
-            try:
-                self._update_status()
-            except Exception as exc:
-                self.info.value = (
-                    f"<span style='color:red'>Failed to refresh status: {exc}</span>"
-                )
-            else:
-                self.info.value = "<span style='color:green'>Status refreshed.</span>"
-            finally:
-                # Re-enable the button before touching anything else: if a
-                # later step raises, the page must not be left with the
-                # button permanently disabled.
-                self.refresh_button.disabled = False
-                self._refreshing = False
-                self._last_updated.value = (
-                    f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
-                )
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _update_status(self):
+    def _do_refresh(self):
         rows = []
 
         try:
@@ -579,7 +610,9 @@ def _safe_fraction(used, total) -> float:
     return used / total
 
 
-class SystemResourcesWidget(ipw.VBox):
+class SystemResourcesWidget(ControlSectionWidget):
+    title = "Resources"
+    description = "Memory, CPU and disk usage of this container."
     _THRESHOLDS: ClassVar[tuple] = ((0.75, "success"), (0.90, "warning"))
 
     def __init__(self):
@@ -590,16 +623,11 @@ class SystemResourcesWidget(ipw.VBox):
         self._disk_bar = ipw.FloatProgress(min=0, max=1, description="Disk:")
         self._disk_label = ipw.HTML()
 
-        self.refresh_button = ipw.Button(description="Refresh")
-        self.refresh_button.on_click(self.refresh)
-        self._last_updated = ipw.HTML()
-
         super().__init__(
-            children=[
+            body_children=[
                 ipw.HBox([self._memory_bar, self._memory_label]),
                 ipw.HBox([self._cpu_bar, self._cpu_label]),
                 ipw.HBox([self._disk_bar, self._disk_label]),
-                ipw.HBox([self.refresh_button, self._last_updated]),
             ]
         )
         self.refresh()
@@ -621,7 +649,7 @@ class SystemResourcesWidget(ipw.VBox):
         bar.bar_style = "danger"
         label.value = f"<span style='color:red'>{html.escape(str(exc))}</span>"
 
-    def refresh(self, _=None):
+    def _do_refresh(self):
         try:
             used, total, limited = _memory_status()
             fraction = _safe_fraction(used, total)
@@ -652,10 +680,6 @@ class SystemResourcesWidget(ipw.VBox):
             self._set_row(self._disk_bar, self._disk_label, fraction, text)
         except Exception as exc:
             self._set_row_error(self._disk_bar, self._disk_label, exc)
-
-        self._last_updated.value = (
-            f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
-        )
 
 
 def _repository_path(profile) -> Path:
@@ -715,18 +739,16 @@ class _ListLogHandler(logging.Handler):
         self.lines.append(self.format(record))
 
 
-class StorageWidget(ipw.VBox):
+class StorageWidget(ControlSectionWidget):
     """Breaks down disk usage for the loaded profile and runs storage maintenance."""
 
+    title = "Storage"
+    description = "Disk usage of profile data and apps; storage maintenance."
+
     def __init__(self):
-        self._refreshing = False
         self._maintaining = False
 
-        self.info = ipw.HTML()
         self._table = ipw.HTML()
-        self.refresh_button = ipw.Button(description="Refresh")
-        self.refresh_button.on_click(self.refresh)
-        self._last_updated = ipw.HTML()
 
         self._dry_run_checkbox = ipw.Checkbox(
             description="Dry run (only report what would be done)", value=True
@@ -744,10 +766,8 @@ class StorageWidget(ipw.VBox):
         self._maintain_output = ipw.HTML()
 
         super().__init__(
-            children=[
-                self.info,
+            body_children=[
                 self._table,
-                ipw.HBox([self.refresh_button, self._last_updated]),
                 ipw.HTML("<hr><h4>Maintenance</h4>"),
                 self._dry_run_checkbox,
                 self._full_checkbox,
@@ -767,38 +787,8 @@ class StorageWidget(ipw.VBox):
             "</tr>"
         )
 
-    def refresh(self, _=None):
-        if self._refreshing:
-            return
-        self._refreshing = True
-        self.info.value = (
-            "Refreshing storage breakdown... <i class='fa fa-spinner fa-spin'></i>"
-        )
-        self.refresh_button.disabled = True
-
-        def worker():
-            try:
-                self._update_table()
-            except Exception as exc:
-                self.info.value = (
-                    "<span style='color:red'>Failed to refresh storage "
-                    f"breakdown: {exc}</span>"
-                )
-            else:
-                self.info.value = (
-                    "<span style='color:green'>Storage breakdown refreshed.</span>"
-                )
-            finally:
-                # Re-enable the button before touching anything else: if a
-                # later step raises, the page must not be left with the
-                # button permanently disabled.
-                self.refresh_button.disabled = False
-                self._refreshing = False
-                self._last_updated.value = (
-                    f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
-                )
-
-        threading.Thread(target=worker, daemon=True).start()
+    def _do_refresh(self):
+        self._update_table()
 
     def _update_table(self):
         profile = aiida.get_profile()
@@ -949,7 +939,10 @@ class StorageWidget(ipw.VBox):
         threading.Thread(target=worker, daemon=True).start()
 
 
-class ProcessControlWidget(ipw.VBox):
+class ProcessControlWidget(ControlSectionWidget):
+    title = "Processes"
+    description = "Inspect, pause, resume or kill AiiDA processes."
+
     def __init__(self):
         process_list = process.ProcessListWidget(path_to_root="../")
         self.process_list = process_list
@@ -997,10 +990,8 @@ class ProcessControlWidget(ipw.VBox):
         self._action_running = False
         self._kill_armed = False
 
-        process_list.update()
-
         super().__init__(
-            children=[
+            body_children=[
                 ipw.HBox([past_days_widget, all_days_checkbox]),
                 process_state_widget,
                 process_list,
@@ -1009,6 +1000,10 @@ class ProcessControlWidget(ipw.VBox):
                 self._action_status,
             ]
         )
+        self.refresh()
+
+    def _do_refresh(self):
+        self.process_list.update()
 
     def _on_process_list_updated(self, _=None):
         self._rebuild_options()
@@ -1179,11 +1174,11 @@ class Profile(ipw.HBox):
         super().__init__(children=[self.name, self.make_default, self.delete])
 
 
-class ProfileControlWidget(ipw.VBox):
-    def __init__(self):
-        self._title = ipw.HTML(value="<h3> List of profiles </h3>")
-        self._status = ipw.HTML(value="")
+class ProfileControlWidget(ControlSectionWidget):
+    title = "Profiles"
+    description = "Manage AiiDA profiles: default profile and deletion."
 
+    def __init__(self):
         self._confirm_target = None
         self._confirm_warning = ipw.HTML(value="")
         self._confirm_delete_storage = ipw.Checkbox(
@@ -1206,18 +1201,16 @@ class ProfileControlWidget(ipw.VBox):
         self._confirm_box.layout.display = "none"
 
         self._rows_box = ipw.VBox()
-        self.refresh()
 
         super().__init__(
-            children=[
-                self._title,
+            body_children=[
                 self._rows_box,
                 self._confirm_box,
-                self._status,
             ]
         )
+        self.refresh()
 
-    def refresh(self, _=None):
+    def _do_refresh(self):
         config = manage.get_config()
         loaded_profile = get_profile()
         loaded_profile_name = (
@@ -1241,12 +1234,10 @@ class ProfileControlWidget(ipw.VBox):
             config.set_default_profile(name, overwrite=True)
             config.store()
         except Exception as exc:
-            self._status.value = f'<font color="red">Error: {exc}</font>'
+            self.show_error(f"Error: {exc}")
             return
-        self._status.value = (
-            f'<font color="green">Profile "{name}" is now the default.</font>'
-        )
-        self.refresh()
+        self.show_success(f'Profile "{name}" is now the default.')
+        self._do_refresh()
 
     def _on_delete_clicked(self, name):
         self._confirm_target = name
@@ -1269,12 +1260,12 @@ class ProfileControlWidget(ipw.VBox):
             config = manage.get_config()
             config.delete_profile(name, delete_storage=delete_storage)
         except Exception as exc:
-            self._status.value = f'<font color="red">Error: {exc}</font>'
+            self.show_error(f"Error: {exc}")
         else:
-            self._status.value = f'<font color="green">Profile "{name}" deleted.</font>'
+            self.show_success(f'Profile "{name}" deleted.')
         self._confirm_target = None
         self._confirm_box.layout.display = "none"
-        self.refresh()
+        self._do_refresh()
 
 
 _RESET_MODE_LABELS = {
@@ -1298,8 +1289,10 @@ _RESET_MODE_DESCRIPTIONS = {
 _FACTORY_RESET_CONFIRM_PHRASE = "factory-reset"
 
 
-class DangerZoneWidget(ipw.VBox):
+class DangerZoneWidget(ControlSectionWidget):
     """Schedules a factory reset performed by the container on next restart."""
+
+    title = "Danger zone"
 
     def __init__(self):
         self._env_warning = ipw.HTML()
@@ -1351,14 +1344,14 @@ class DangerZoneWidget(ipw.VBox):
         )
 
         super().__init__(
-            children=[
-                ipw.HTML("<h3>Danger zone</h3>"),
+            body_children=[
                 self._env_warning,
                 self._schedule_box,
                 self._scheduled_box,
             ],
-            layout=ipw.Layout(border="1px solid #d73a49", padding="12px"),
         )
+        self.layout.border = "1px solid #d73a49"
+        self.layout.padding = "12px"
         self.refresh()
 
     def _on_mode_change(self, change):
@@ -1388,7 +1381,7 @@ class DangerZoneWidget(ipw.VBox):
             return
         self._confirm_text.value = ""
         self._schedule_status.value = ""
-        self.refresh()
+        self._do_refresh()
 
     def _on_cancel_clicked(self, _=None):
         try:
@@ -1400,9 +1393,9 @@ class DangerZoneWidget(ipw.VBox):
             )
             return
         self._cancel_status.value = ""
-        self.refresh()
+        self._do_refresh()
 
-    def refresh(self, _=None):
+    def _do_refresh(self):
         env_value = os.environ.get("AIIDALAB_FACTORY_RESET")
         if env_value and env_value != "0":
             self._env_warning.value = (
