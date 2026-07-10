@@ -40,24 +40,24 @@ _FACTORY_RESET_FILE = (
 
 
 class ControlSectionWidget(ipw.VBox):
-    """Shared anatomy for a control-page tab: title, description, body, footer.
+    """Shared anatomy for a control-page tab: description, body, footer.
 
     The footer (refresh button, "Last updated" label, transient feedback) and
     the threaded refresh-with-guard pattern are common to every section, so
     they live here; subclasses only provide a body and a `_do_refresh()`.
     """
 
-    title = ""
     description = ""
 
     def __init__(self, body_children):
         self._refreshing = False
 
-        header_children = [ipw.HTML(f"<h3>{html.escape(self.title)}</h3>")]
+        header_children = []
         if self.description:
             header_children.append(
                 ipw.HTML(
-                    f"<small style='color:gray'>{html.escape(self.description)}</small>"
+                    f"<div style='color:{Theme.COLORS.GRAY};font-size:13px;"
+                    f"margin:2px 0 6px 0;'>{html.escape(self.description)}</div>"
                 )
             )
 
@@ -70,6 +70,7 @@ class ControlSectionWidget(ipw.VBox):
         super().__init__(
             children=[*header_children, *body_children, footer],
         )
+        self.layout.padding = "8px 0 0 0"
 
     def show_success(self, text):
         self.info.value = _state_span("ok", text)
@@ -249,7 +250,6 @@ def _read_log_tail(path, lines=50) -> str:
 
 
 class DaemonControlWidget(ControlSectionWidget):
-    title = "Daemon"
     description = "The daemon runs your AiiDA processes in the background."
     _LOG_TAIL_LINES = 50
 
@@ -470,7 +470,6 @@ class DaemonControlWidget(ControlSectionWidget):
 
 
 class StatusOverviewWidget(ControlSectionWidget):
-    title = "Status"
     description = "Health of the services behind AiiDA."
     _ROW_ICONS: ClassVar[dict] = {
         "ok": Theme.ICONS.CHECK,
@@ -655,7 +654,6 @@ def _safe_fraction(used, total) -> float:
 
 
 class SystemResourcesWidget(ControlSectionWidget):
-    title = "Resources"
     description = "Memory, CPU and disk usage of this container."
     _THRESHOLDS: ClassVar[tuple] = ((0.75, "success"), (0.90, "warning"))
 
@@ -814,7 +812,6 @@ class _ListLogHandler(logging.Handler):
 class StorageWidget(ControlSectionWidget):
     """Breaks down disk usage for the loaded profile and runs storage maintenance."""
 
-    title = "Storage"
     description = "Disk usage of profile data and apps; storage maintenance."
 
     def __init__(self):
@@ -1010,7 +1007,6 @@ class StorageWidget(ControlSectionWidget):
 
 
 class ProcessControlWidget(ControlSectionWidget):
-    title = "Processes"
     description = "Inspect, pause, resume or kill AiiDA processes."
 
     def __init__(self):
@@ -1262,7 +1258,6 @@ class Profile(ipw.HBox):
 
 
 class ProfileControlWidget(ControlSectionWidget):
-    title = "Profiles"
     description = "Manage AiiDA profiles: default profile and deletion."
 
     def __init__(self):
@@ -1378,8 +1373,6 @@ _FACTORY_RESET_CONFIRM_PHRASE = "factory-reset"
 
 class DangerZoneWidget(ControlSectionWidget):
     """Schedules a factory reset performed by the container on next restart."""
-
-    title = "Danger zone"
 
     def __init__(self):
         self._env_warning = ipw.HTML()
