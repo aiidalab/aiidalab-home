@@ -1,6 +1,7 @@
 import html
 import logging
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -141,6 +142,33 @@ def _daemon_status(client) -> tuple:
     """Probe the daemon and return an (state, text) status pair."""
     state, text, _info = _probe_daemon(client)
     return state, text
+
+
+def _storage_summary(profile, storage) -> str:
+    """Compact, credential-free one-line summary of a profile's storage.
+
+    Never renders `profile.storage_config` raw — it contains
+    `database_password`.
+    """
+    backend = profile.storage_backend
+    try:
+        if backend == "core.psql_dos":
+            config = profile.storage_config
+            return (
+                f"PostgreSQL {config['database_name']} @ "
+                f"{config['database_hostname']}:{config['database_port']} "
+                "+ file repository"
+            )
+        if backend == "core.sqlite_dos":
+            return "SQLite database + file repository"
+    except KeyError:
+        pass
+    return str(storage)
+
+
+def _sanitize_broker_url(url) -> str:
+    """Strip userinfo (`user:pass@`) from a broker URL, e.g. an AMQP URL."""
+    return re.sub(r"://[^@/ ]+@", "://", url)
 
 
 def _humanize_age(seconds) -> str:
@@ -458,16 +486,18 @@ class StatusOverviewWidget(ControlSectionWidget):
         self.refresh()
 
     @classmethod
-    def _status_row(cls, state, label, text):
+    def _status_row(cls, state, label, text, tooltip=None):
         icon = cls._ROW_ICONS[state]
         color = _STATE_COLORS[state]
         text_color = "inherit" if state == "ok" else color
+        title_attr = f" title='{html.escape(tooltip)}'" if tooltip else ""
         return (
             f"<tr>"
             f"<td style='padding:1px 8px;'>"
             f"<span style='color:{color}'>{icon}</span></td>"
             f"<td style='padding:1px 8px;'><b>{label}</b></td>"
-            f"<td style='color:{text_color};padding:1px 8px;'>{html.escape(text)}</td>"
+            f"<td style='color:{text_color};padding:1px 8px;'{title_attr}>"
+            f"{html.escape(text)}</td>"
             f"</tr>"
         )
 
@@ -500,7 +530,10 @@ class StatusOverviewWidget(ControlSectionWidget):
             # connection; run a cheap query to actually probe the database.
             orm.QueryBuilder().append(orm.User).count()
             storage = manage.get_manager().get_profile_storage()
-            rows.append(self._status_row("ok", "storage", str(storage)))
+            summary = _storage_summary(get_profile(), storage)
+            rows.append(
+                self._status_row("ok", "storage", summary, tooltip=str(storage))
+            )
         except Exception as exc:
             rows.append(self._status_row("error", "storage", str(exc)))
 
@@ -511,7 +544,10 @@ class StatusOverviewWidget(ControlSectionWidget):
                     self._status_row("warning", "broker", "No broker configured")
                 )
             else:
-                rows.append(self._status_row("ok", "broker", str(broker)))
+                sanitized = _sanitize_broker_url(str(broker))
+                rows.append(
+                    self._status_row("ok", "broker", sanitized, tooltip=sanitized)
+                )
         except Exception as exc:
             rows.append(self._status_row("error", "broker", str(exc)))
 
@@ -623,19 +659,47 @@ class SystemResourcesWidget(ControlSectionWidget):
     description = "Memory, CPU and disk usage of this container."
     _THRESHOLDS: ClassVar[tuple] = ((0.75, "success"), (0.90, "warning"))
 
+    _LABEL_WIDTH = "90px"
+
     def __init__(self):
-        self._memory_bar = ipw.FloatProgress(min=0, max=1, description="Memory:")
+        self._memory_bar = ipw.FloatProgress(min=0, max=1)
         self._memory_label = ipw.HTML()
-        self._cpu_bar = ipw.FloatProgress(min=0, max=1, description="CPU load:")
+        self._cpu_bar = ipw.FloatProgress(min=0, max=1)
         self._cpu_label = ipw.HTML()
-        self._disk_bar = ipw.FloatProgress(min=0, max=1, description="Disk:")
+        self._disk_bar = ipw.FloatProgress(min=0, max=1)
         self._disk_label = ipw.HTML()
 
         super().__init__(
             body_children=[
-                ipw.HBox([self._memory_bar, self._memory_label]),
-                ipw.HBox([self._cpu_bar, self._cpu_label]),
-                ipw.HBox([self._disk_bar, self._disk_label]),
+                ipw.HBox(
+                    [
+                        ipw.HTML(
+                            "<b>Memory</b>",
+                            layout=ipw.Layout(width=self._LABEL_WIDTH),
+                        ),
+                        self._memory_bar,
+                        self._memory_label,
+                    ]
+                ),
+                ipw.HBox(
+                    [
+                        ipw.HTML(
+                            "<b>CPU load</b>",
+                            layout=ipw.Layout(width=self._LABEL_WIDTH),
+                        ),
+                        self._cpu_bar,
+                        self._cpu_label,
+                    ]
+                ),
+                ipw.HBox(
+                    [
+                        ipw.HTML(
+                            "<b>Disk</b>", layout=ipw.Layout(width=self._LABEL_WIDTH)
+                        ),
+                        self._disk_bar,
+                        self._disk_label,
+                    ]
+                ),
             ]
         )
         self.refresh()
@@ -998,9 +1062,14 @@ class ProcessControlWidget(ControlSectionWidget):
 
         super().__init__(
             body_children=[
-                ipw.HBox([past_days_widget, all_days_checkbox]),
-                process_state_widget,
+                ipw.HBox(
+                    [
+                        process_state_widget,
+                        ipw.VBox([past_days_widget, all_days_checkbox]),
+                    ]
+                ),
                 process_list,
+                ipw.HTML("<h4>Actions</h4>"),
                 self.process_select,
                 ipw.HBox([self.pause_button, self.play_button, self.kill_button]),
                 self._action_status,
@@ -1160,8 +1229,16 @@ class Profile(ipw.HBox):
     def __init__(self, profile, is_default, is_loaded, on_make_default, on_delete):
         self.profile = profile
 
-        label = f"{profile.name} (default)" if is_default else profile.name
-        self.name = ipw.HTML(f"""<font size="3"> * {label}</font>""")
+        name_html = html.escape(profile.name)
+        if is_default:
+            name_html += (
+                " <span style='background:"
+                f"{Theme.COLORS.CHECK};color:white;padding:1px 8px;"
+                "border-radius:9px;font-size:11px;'>default</span>"
+            )
+        if is_loaded:
+            name_html += f" <span style='color:{Theme.COLORS.GRAY}'>(in use)</span>"
+        self.name = ipw.HTML(name_html, layout=ipw.Layout(width="220px"))
 
         self.make_default = ipw.Button(
             description="Make default", button_style="info", icon="star"
