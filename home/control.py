@@ -25,6 +25,10 @@ _DAEMON_LINE_COLORS = {
     "warning": "#b58900",
 }
 
+_FACTORY_RESET_FILE = (
+    Path.home() / "AIIDALAB_FACTORY_RESET"
+)  # module constant so tests can monkeypatch
+
 
 def _daemon_status(client) -> tuple:
     """Probe the daemon and return an (state, text) status pair."""
@@ -913,3 +917,165 @@ class ProfileControlWidget(ipw.VBox):
         self._confirm_target = None
         self._confirm_box.layout.display = "none"
         self.refresh()
+
+
+_RESET_MODE_LABELS = {
+    "1": "Reset installed apps and local software",
+    "2": "Full factory reset — erase everything",
+}
+
+_RESET_MODE_DETAILS = {
+    "1": "Removes ~/apps and ~/.local. AiiDA data and profiles survive.",
+    "2": (
+        "Erases EVERYTHING in the home directory, including all AiiDA "
+        "data, profiles, and files."
+    ),
+}
+
+_RESET_MODE_DESCRIPTIONS = {
+    mode: f"{_RESET_MODE_LABELS[mode]} — {_RESET_MODE_DETAILS[mode]}"
+    for mode in _RESET_MODE_LABELS
+}
+
+_FACTORY_RESET_CONFIRM_PHRASE = "factory-reset"
+
+
+class DangerZoneWidget(ipw.VBox):
+    """Schedules a factory reset performed by the container on next restart."""
+
+    def __init__(self):
+        self._env_warning = ipw.HTML()
+
+        self._mode_radio = ipw.RadioButtons(
+            options=[(label, mode) for mode, label in _RESET_MODE_LABELS.items()],
+            value="1",
+        )
+        self._mode_details = ipw.HTML()
+        self._mode_radio.observe(self._on_mode_change, names="value")
+        self._confirm_text = ipw.Text(
+            placeholder=(
+                f"Type `{_FACTORY_RESET_CONFIRM_PHRASE}` to enable the button"
+            ),
+        )
+        self._confirm_text.observe(self._on_confirm_text_change, names="value")
+        self._schedule_button = ipw.Button(
+            description="Schedule factory reset",
+            button_style="danger",
+            disabled=True,
+        )
+        self._schedule_button.on_click(self._on_schedule_clicked)
+        self._schedule_status = ipw.HTML()
+        self._schedule_box = ipw.VBox(
+            children=[
+                ipw.HTML(
+                    "A factory reset is performed by the AiiDAlab container on "
+                    "the <b>next restart</b>. Choose what to reset:"
+                ),
+                self._mode_radio,
+                self._mode_details,
+                self._confirm_text,
+                self._schedule_button,
+                self._schedule_status,
+            ]
+        )
+        self._on_mode_change({"new": self._mode_radio.value})
+
+        self._scheduled_alert = ipw.HTML()
+        self._cancel_button = ipw.Button(description="Cancel scheduled reset")
+        self._cancel_button.on_click(self._on_cancel_clicked)
+        self._cancel_status = ipw.HTML()
+        self._scheduled_box = ipw.VBox(
+            children=[
+                self._scheduled_alert,
+                self._cancel_button,
+                self._cancel_status,
+            ]
+        )
+
+        super().__init__(
+            children=[
+                ipw.HTML("<h3>Danger zone</h3>"),
+                self._env_warning,
+                self._schedule_box,
+                self._scheduled_box,
+            ],
+            layout=ipw.Layout(border="1px solid #d73a49", padding="12px"),
+        )
+        self.refresh()
+
+    def _on_mode_change(self, change):
+        self._mode_details.value = html.escape(_RESET_MODE_DETAILS[change["new"]])
+
+    def _on_confirm_text_change(self, change):
+        self._schedule_button.disabled = (
+            change["new"].strip() != _FACTORY_RESET_CONFIRM_PHRASE
+        )
+
+    def _on_schedule_clicked(self, _=None):
+        mode = self._mode_radio.value
+        try:
+            _FACTORY_RESET_FILE.write_text(mode)
+            written_back = _FACTORY_RESET_FILE.read_text()
+        except Exception as exc:
+            self._schedule_status.value = (
+                f"<span style='color:red'>Failed to schedule factory reset: "
+                f"{html.escape(str(exc))}</span>"
+            )
+            return
+        if written_back != mode:
+            self._schedule_status.value = (
+                "<span style='color:red'>Failed to schedule factory reset: "
+                "could not verify the flag file content</span>"
+            )
+            return
+        self._confirm_text.value = ""
+        self._schedule_status.value = ""
+        self.refresh()
+
+    def _on_cancel_clicked(self, _=None):
+        try:
+            _FACTORY_RESET_FILE.unlink(missing_ok=True)
+        except Exception as exc:
+            self._cancel_status.value = (
+                f"<span style='color:red'>Failed to cancel the scheduled reset: "
+                f"{html.escape(str(exc))}</span>"
+            )
+            return
+        self._cancel_status.value = ""
+        self.refresh()
+
+    def refresh(self, _=None):
+        env_value = os.environ.get("AIIDALAB_FACTORY_RESET")
+        if env_value and env_value != "0":
+            self._env_warning.value = (
+                "<div style='color:red'><b>Warning:</b> the "
+                "<code>AIIDALAB_FACTORY_RESET</code> environment variable is "
+                f"set (<code>{html.escape(env_value)}</code>) and takes "
+                "precedence over anything configured here.</div>"
+            )
+        else:
+            self._env_warning.value = ""
+
+        if _FACTORY_RESET_FILE.exists():
+            try:
+                content = _FACTORY_RESET_FILE.read_text().strip()
+            except Exception as exc:
+                description = f"could not be read: {html.escape(str(exc))}"
+            else:
+                description = html.escape(
+                    _RESET_MODE_DESCRIPTIONS.get(content, f"unknown mode '{content}'")
+                )
+            self._scheduled_alert.value = (
+                "<div style='background:#fff3cd;color:#7a5b00;padding:8px;"
+                "border-radius:4px;'>"
+                f"A factory reset ({description}) is scheduled. It will be "
+                "performed the next time this container is restarted (e.g. "
+                "<code>aiidalab-launch restart</code>, or restart the "
+                "container from Docker). Until then it can be "
+                "cancelled.</div>"
+            )
+            self._schedule_box.layout.display = "none"
+            self._scheduled_box.layout.display = ""
+        else:
+            self._schedule_box.layout.display = ""
+            self._scheduled_box.layout.display = "none"
