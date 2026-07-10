@@ -1155,12 +1155,6 @@ class ProcessControlWidget(ipw.VBox):
         threading.Thread(target=worker, daemon=True).start()
 
 
-class GroupControlWidget(ipw.VBox):
-    def __init__(self):
-        text = ipw.HTML("I am a Group Control Page")
-        super().__init__(children=[text])
-
-
 class Profile(ipw.HBox):
     def __init__(self, profile, is_default, is_loaded, on_make_default, on_delete):
         self.profile = profile
