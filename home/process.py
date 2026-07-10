@@ -73,6 +73,14 @@ PROCESS_TABLE_TEMPLATE = Template(
 )
 
 
+# Header labels produced by `CalculationQueryBuilder.get_projected` for the
+# projections used in `ProcessListWidget.update`; named here so callers (e.g.
+# `home.control`) don't hardcode these strings.
+HEADER_PK = "PK"
+HEADER_PROCESS_LABEL = "Process label"
+HEADER_STATE = "Process State"
+
+
 def _stringify_process_cell(value):
     if value is None:
         return ""
@@ -626,11 +634,13 @@ class ProcessListWidget(ipw.VBox):
     process_states = tl.List()
     process_label = tl.Unicode(allow_none=True)
     description_contains = tl.Unicode(allow_none=True)
+    updated = tl.Int(0)
 
     def __init__(self, path_to_root="../", **kwargs):
         self.path_to_root = path_to_root
         self.table = ipw.HTML()
         self.output = ipw.HTML()
+        self.current_rows = {"headers": [], "rows": []}
         update_button = ipw.Button(description="Update now")
         update_button.on_click(self.update)
         super().__init__(
@@ -684,11 +694,14 @@ class ProcessListWidget(ipw.VBox):
             # Keep only process that contain the requested string in the description.
             rows = _filter_process_rows(rows, self.description_contains)
 
+            self.current_rows = {"headers": headers, "rows": rows}
+
             self.output.value = f"{len(rows)} processes shown"
 
             # Add HTML links.
             rows = _add_process_links(rows, self.path_to_root)
             self.table.value = _render_process_table(headers, rows)
+            self.updated += 1
         except Exception as exc:
             self.output.value = (
                 f'<span style="color:red">Failed to update process list: {exc}</span>'

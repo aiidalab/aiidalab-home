@@ -14,7 +14,9 @@ import plumpy
 import psutil
 import traitlets as tr
 from aiida import engine, get_profile, manage, orm
+from aiida.common.exceptions import NotExistent
 from aiida.engine.daemon.client import DaemonException
+from aiida.engine.processes import control as process_control
 from sqlalchemy import text
 
 from home import process
@@ -950,6 +952,7 @@ class StorageWidget(ipw.VBox):
 class ProcessControlWidget(ipw.VBox):
     def __init__(self):
         process_list = process.ProcessListWidget(path_to_root="../")
+        self.process_list = process_list
         past_days_widget = ipw.IntText(value=7, description="Past days:")
         tr.link((past_days_widget, "value"), (process_list, "past_days"))
 
@@ -970,6 +973,30 @@ class ProcessControlWidget(ipw.VBox):
             disabled=False,
         )
         tr.dlink((process_state_widget, "value"), (process_list, "process_states"))
+
+        self.process_select = ipw.SelectMultiple(
+            description="Act on:",
+            options=[],
+            rows=8,
+            layout=ipw.Layout(width="600px"),
+            style={"description_width": "initial"},
+        )
+        self.process_select.observe(self._on_selection_change, names="value")
+        process_list.observe(self._on_process_list_updated, names="updated")
+
+        self.pause_button = ipw.Button(description="Pause", disabled=True)
+        self.pause_button.on_click(self._on_pause_clicked)
+        self.play_button = ipw.Button(description="Play", disabled=True)
+        self.play_button.on_click(self._on_play_clicked)
+        self.kill_button = ipw.Button(
+            description="Kill", button_style="danger", disabled=True
+        )
+        self.kill_button.on_click(self._on_kill_clicked)
+        self._action_status = ipw.HTML()
+
+        self._action_running = False
+        self._kill_armed = False
+
         process_list.update()
 
         super().__init__(
@@ -977,8 +1004,155 @@ class ProcessControlWidget(ipw.VBox):
                 ipw.HBox([past_days_widget, all_days_checkbox]),
                 process_state_widget,
                 process_list,
+                self.process_select,
+                ipw.HBox([self.pause_button, self.play_button, self.kill_button]),
+                self._action_status,
             ]
         )
+
+    def _on_process_list_updated(self, _=None):
+        self._rebuild_options()
+        self._disarm_kill()
+        self._sync_action_buttons_disabled()
+
+    def _rebuild_options(self):
+        rows = self.process_list.current_rows.get("rows", [])
+        previous_selection = set(self.process_select.value)
+
+        options = []
+        for row in rows:
+            try:
+                pk = int(row[process.HEADER_PK])
+            except (KeyError, ValueError, TypeError):
+                continue
+            label = (
+                f"{pk} | {row.get(process.HEADER_PROCESS_LABEL, '')} | "
+                f"{row.get(process.HEADER_STATE, '')}"
+            )
+            options.append((label, pk))
+
+        self.process_select.options = options
+        self.process_select.value = tuple(
+            pk for _, pk in options if pk in previous_selection
+        )
+
+    def _on_selection_change(self, _=None):
+        self._disarm_kill()
+        self._sync_action_buttons_disabled()
+
+    def _sync_action_buttons_disabled(self):
+        disabled = self._action_running or not self.process_select.value
+        self.pause_button.disabled = disabled
+        self.play_button.disabled = disabled
+        self.kill_button.disabled = disabled
+
+    def _disarm_kill(self):
+        self._kill_armed = False
+        self.kill_button.description = "Kill"
+
+    def _on_pause_clicked(self, _=None):
+        self._disarm_kill()
+        self._dispatch_action(
+            action_name="pause the process(es)",
+            control_func=process_control.pause_processes,
+            verb="Pause",
+        )
+
+    def _on_play_clicked(self, _=None):
+        self._disarm_kill()
+        self._dispatch_action(
+            action_name="play the process(es)",
+            control_func=process_control.play_processes,
+            verb="Play",
+        )
+
+    def _on_kill_clicked(self, _=None):
+        selected = self.process_select.value
+        if not selected:
+            self._action_status.value = "Select at least one process."
+            return
+        if not self._kill_armed:
+            self._kill_armed = True
+            self.kill_button.description = f"Confirm kill ({len(selected)})"
+            return
+        self._dispatch_action(
+            action_name="kill the process(es)",
+            control_func=process_control.kill_processes,
+            verb="Kill",
+        )
+        self._disarm_kill()
+
+    def _dispatch_action(self, action_name, control_func, verb):
+        selected_pks = list(self.process_select.value)
+        if not selected_pks:
+            self._action_status.value = "Select at least one process."
+            return
+
+        if not engine.daemon.get_daemon_client().is_daemon_running:
+            self._action_status.value = (
+                "<span style='color:#b58900'>Process actions need the "
+                "running daemon (see the Daemon section above).</span>"
+            )
+            return
+
+        self._action_running = True
+        self._sync_action_buttons_disabled()
+        self._action_status.value = (
+            f"{verb} request in progress... <i class='fa fa-spinner fa-spin'></i>"
+        )
+
+        def worker():
+            try:
+                nodes = []
+                errors = []
+                for pk in selected_pks:
+                    try:
+                        nodes.append(orm.load_node(pk))
+                    except NotExistent as exc:
+                        errors.append(f"PK {pk}: {exc}")
+
+                if nodes:
+                    control_func(nodes, timeout=5.0)
+
+                messages = []
+                if nodes:
+                    messages.append(
+                        f"<span style='color:green'>{verb} request sent to "
+                        f"{len(nodes)} process(es). States may take a few "
+                        "seconds to change.</span>"
+                    )
+                if errors:
+                    messages.append(
+                        "<span style='color:red'>"
+                        + "<br>".join(html.escape(e) for e in errors)
+                        + "</span>"
+                    )
+                self._action_status.value = "<br>".join(messages) or "Nothing to do."
+            except process_control.ProcessTimeoutException as exc:
+                self._action_status.value = (
+                    f"<span style='color:red'>Timed out trying to "
+                    f"{action_name}: {html.escape(str(exc))}</span>"
+                )
+            except Exception as exc:
+                self._action_status.value = (
+                    f"<span style='color:red'>Failed to {action_name}: "
+                    f"{html.escape(str(exc))}</span>"
+                )
+            finally:
+                # Re-enable the buttons before refreshing the process list:
+                # if the refresh raises, the page must not be left with the
+                # buttons permanently disabled.
+                self._action_running = False
+                self._sync_action_buttons_disabled()
+                try:
+                    self.process_list.update()
+                except Exception as exc:
+                    self._action_status.value += (
+                        "<br><span style='color:red'>Failed to refresh the "
+                        f"process list: {html.escape(str(exc))}</span>"
+                    )
+
+        threading.Thread(target=worker, daemon=True).start()
 
 
 class GroupControlWidget(ipw.VBox):
