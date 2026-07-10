@@ -20,12 +20,18 @@ from aiida.engine.processes import control as process_control
 from sqlalchemy import text
 
 from home import process
+from home.themes import ThemeDefault as Theme
 
-_DAEMON_LINE_COLORS = {
-    "ok": "green",
-    "error": "red",
-    "warning": "#b58900",
+_STATE_COLORS = {
+    "ok": Theme.COLORS.CHECK,
+    "warning": Theme.COLORS.AIIDALAB_ORANGE,
+    "error": Theme.COLORS.DANGER,
 }
+
+
+def _state_span(state, text) -> str:
+    return f"<span style='color:{_STATE_COLORS[state]}'>{html.escape(text)}</span>"
+
 
 _FACTORY_RESET_FILE = (
     Path.home() / "AIIDALAB_FACTORY_RESET"
@@ -54,7 +60,7 @@ class ControlSectionWidget(ipw.VBox):
                 )
             )
 
-        self.refresh_button = ipw.Button(description="Refresh")
+        self.refresh_button = ipw.Button(description="Refresh", icon="refresh")
         self.refresh_button.on_click(self.refresh)
         self._last_updated = ipw.HTML()
         self.info = ipw.HTML()
@@ -65,13 +71,13 @@ class ControlSectionWidget(ipw.VBox):
         )
 
     def show_success(self, text):
-        self.info.value = f"<span style='color:green'>{html.escape(text)}</span>"
+        self.info.value = _state_span("ok", text)
 
     def show_warning(self, text):
-        self.info.value = f"<span style='color:#b58900'>{html.escape(text)}</span>"
+        self.info.value = _state_span("warning", text)
 
     def show_error(self, text):
-        self.info.value = f"<span style='color:red'>{html.escape(text)}</span>"
+        self.info.value = _state_span("error", text)
 
     def show_plain(self, text):
         self.info.value = html.escape(text)
@@ -225,16 +231,20 @@ class DaemonControlWidget(ControlSectionWidget):
         self._worker_table = ipw.HTML()
 
         # Start daemon.
-        self.start_button = ipw.Button(description="Start daemon", button_style="info")
+        self.start_button = ipw.Button(
+            description="Start daemon", button_style="info", icon="play"
+        )
         self.start_button.on_click(self._start_daemon)
 
         # Stop daemon.
-        self.stop_button = ipw.Button(description="Stop daemon", button_style="danger")
+        self.stop_button = ipw.Button(
+            description="Stop daemon", button_style="danger", icon="stop"
+        )
         self.stop_button.on_click(self._stop_daemon)
 
         # Restart daemon.
         self.restart_button = ipw.Button(
-            description="Restart daemon", button_style="warning"
+            description="Restart daemon", button_style="warning", icon="repeat"
         )
         self.restart_button.on_click(self._restart_daemon)
 
@@ -248,7 +258,7 @@ class DaemonControlWidget(ControlSectionWidget):
 
         # Daemon log viewer.
         self._log_content = ipw.HTML()
-        self.reload_log_button = ipw.Button(description="Reload log")
+        self.reload_log_button = ipw.Button(description="Reload log", icon="refresh")
         self.reload_log_button.on_click(self._reload_log)
         self._log_accordion = ipw.Accordion(
             children=[ipw.VBox([self._log_content, self.reload_log_button])],
@@ -382,9 +392,8 @@ class DaemonControlWidget(ControlSectionWidget):
                 try:
                     self._update_status()
                 except Exception as exc:
-                    self.info.value += (
-                        "<br><span style='color:red'>"
-                        f"Failed to refresh the status: {html.escape(str(exc))}</span>"
+                    self.info.value += "<br>" + _state_span(
+                        "error", f"Failed to refresh the status: {exc}"
                     )
 
         threading.Thread(target=worker, daemon=True).start()
@@ -397,23 +406,20 @@ class DaemonControlWidget(ControlSectionWidget):
                 f"{html.escape(tail)}</pre>"
             )
         except Exception as exc:
-            self._log_content.value = (
-                f"<span style='color:red'>Failed to read the log: "
-                f"{html.escape(str(exc))}</span>"
+            self._log_content.value = _state_span(
+                "error", f"Failed to read the log: {exc}"
             )
 
     def _update_status(self, _=None):
         state, text, info = _probe_daemon(self._daemon)
-        color = _DAEMON_LINE_COLORS[state]
-        status_html = f"<span style='color:{color}'>{html.escape(text)}</span>"
+        status_html = _state_span(state, text)
 
         running = state == "ok"
         worker_count = len(info.get("info", {})) if info else 0
         cpu_count = os.cpu_count() or 1
         if running and worker_count > cpu_count:
-            status_html += (
-                " <span style='color:#b58900'>"
-                f"(exceeds {cpu_count} available CPU(s))</span>"
+            status_html += " " + _state_span(
+                "warning", f"(exceeds {cpu_count} available CPU(s))"
             )
         self._status.value = status_html
 
@@ -438,10 +444,10 @@ class DaemonControlWidget(ControlSectionWidget):
 class StatusOverviewWidget(ControlSectionWidget):
     title = "Status"
     description = "Health of the services behind AiiDA."
-    _ROW_STYLES: ClassVar[dict] = {
-        "ok": ("green", "&#10003;"),
-        "error": ("red", "&#10007;"),
-        "warning": ("#b58900", "&#9888;"),
+    _ROW_ICONS: ClassVar[dict] = {
+        "ok": Theme.ICONS.CHECK,
+        "warning": Theme.ICONS.WARNING,
+        "error": Theme.ICONS.TIMES_CIRCLE,
     }
 
     def __init__(self):
@@ -453,11 +459,13 @@ class StatusOverviewWidget(ControlSectionWidget):
 
     @classmethod
     def _status_row(cls, state, label, text):
-        color, symbol = cls._ROW_STYLES[state]
+        icon = cls._ROW_ICONS[state]
+        color = _STATE_COLORS[state]
         text_color = "inherit" if state == "ok" else color
         return (
             f"<tr>"
-            f"<td style='color:{color};padding:1px 8px;'>{symbol}</td>"
+            f"<td style='padding:1px 8px;'>"
+            f"<span style='color:{color}'>{icon}</span></td>"
             f"<td style='padding:1px 8px;'><b>{label}</b></td>"
             f"<td style='color:{text_color};padding:1px 8px;'>{html.escape(text)}</td>"
             f"</tr>"
@@ -647,7 +655,7 @@ class SystemResourcesWidget(ControlSectionWidget):
     def _set_row_error(self, bar, label, exc):
         bar.value = 0
         bar.bar_style = "danger"
-        label.value = f"<span style='color:red'>{html.escape(str(exc))}</span>"
+        label.value = _state_span("error", str(exc))
 
     def _do_refresh(self):
         try:
@@ -760,7 +768,7 @@ class StorageWidget(ControlSectionWidget):
             value=False,
         )
         self._maintain_button = ipw.Button(
-            description="Run maintenance", button_style="warning"
+            description="Run maintenance", button_style="warning", icon="wrench"
         )
         self._maintain_button.on_click(self._on_maintain_clicked)
         self._maintain_output = ipw.HTML()
@@ -779,7 +787,7 @@ class StorageWidget(ControlSectionWidget):
 
     @staticmethod
     def _row(label, text, error=False):
-        color = "red" if error else "inherit"
+        color = _STATE_COLORS["error"] if error else "inherit"
         return (
             "<tr>"
             f"<td style='padding:1px 8px;'><b>{html.escape(label)}</b></td>"
@@ -865,10 +873,11 @@ class StorageWidget(ControlSectionWidget):
             try:
                 daemon = engine.daemon.get_daemon_client()
                 if full and daemon.is_daemon_running:
-                    self._maintain_output.value = (
-                        "<span style='color:#b58900'>Full maintenance requires "
-                        "exclusive access to the profile. Stop the daemon first "
-                        "(see the Daemon section) and try again.</span>"
+                    self._maintain_output.value = _state_span(
+                        "warning",
+                        "Full maintenance requires exclusive access to the "
+                        "profile. Stop the daemon first (see the Daemon "
+                        "section) and try again.",
                     )
                     return
 
@@ -912,13 +921,11 @@ class StorageWidget(ControlSectionWidget):
                         pass
 
                 self._maintain_output.value = (
-                    "<span style='color:green'>Maintenance finished.</span><br>"
-                    f"{log_html}"
+                    _state_span("ok", "Maintenance finished.") + f"<br>{log_html}"
                 )
             except Exception as exc:
-                self._maintain_output.value = (
-                    f"<span style='color:red'>Maintenance failed: "
-                    f"{html.escape(str(exc))}</span>"
+                self._maintain_output.value = _state_span(
+                    "error", f"Maintenance failed: {exc}"
                 )
             finally:
                 # Re-enable the controls before refreshing the table: if the
@@ -931,9 +938,8 @@ class StorageWidget(ControlSectionWidget):
                 try:
                     self.refresh()
                 except Exception as exc:
-                    self._maintain_output.value += (
-                        "<br><span style='color:red'>"
-                        f"Failed to refresh the storage breakdown: {exc}</span>"
+                    self._maintain_output.value += "<br>" + _state_span(
+                        "error", f"Failed to refresh the storage breakdown: {exc}"
                     )
 
         threading.Thread(target=worker, daemon=True).start()
@@ -977,12 +983,12 @@ class ProcessControlWidget(ControlSectionWidget):
         self.process_select.observe(self._on_selection_change, names="value")
         process_list.observe(self._on_process_list_updated, names="updated")
 
-        self.pause_button = ipw.Button(description="Pause", disabled=True)
+        self.pause_button = ipw.Button(description="Pause", disabled=True, icon="pause")
         self.pause_button.on_click(self._on_pause_clicked)
-        self.play_button = ipw.Button(description="Play", disabled=True)
+        self.play_button = ipw.Button(description="Play", disabled=True, icon="play")
         self.play_button.on_click(self._on_play_clicked)
         self.kill_button = ipw.Button(
-            description="Kill", button_style="danger", disabled=True
+            description="Kill", button_style="danger", disabled=True, icon="times"
         )
         self.kill_button.on_click(self._on_kill_clicked)
         self._action_status = ipw.HTML()
@@ -1084,9 +1090,10 @@ class ProcessControlWidget(ControlSectionWidget):
             return
 
         if not engine.daemon.get_daemon_client().is_daemon_running:
-            self._action_status.value = (
-                "<span style='color:#b58900'>Process actions need the "
-                "running daemon (see the Daemon section above).</span>"
+            self._action_status.value = _state_span(
+                "warning",
+                "Process actions need the running daemon (see the Daemon "
+                "section above).",
             )
             return
 
@@ -1112,26 +1119,26 @@ class ProcessControlWidget(ControlSectionWidget):
                 messages = []
                 if nodes:
                     messages.append(
-                        f"<span style='color:green'>{verb} request sent to "
-                        f"{len(nodes)} process(es). States may take a few "
-                        "seconds to change.</span>"
+                        _state_span(
+                            "ok",
+                            f"{verb} request sent to {len(nodes)} process(es). "
+                            "States may take a few seconds to change.",
+                        )
                     )
                 if errors:
                     messages.append(
-                        "<span style='color:red'>"
+                        f"<span style='color:{_STATE_COLORS['error']}'>"
                         + "<br>".join(html.escape(e) for e in errors)
                         + "</span>"
                     )
                 self._action_status.value = "<br>".join(messages) or "Nothing to do."
             except process_control.ProcessTimeoutException as exc:
-                self._action_status.value = (
-                    f"<span style='color:red'>Timed out trying to "
-                    f"{action_name}: {html.escape(str(exc))}</span>"
+                self._action_status.value = _state_span(
+                    "error", f"Timed out trying to {action_name}: {exc}"
                 )
             except Exception as exc:
-                self._action_status.value = (
-                    f"<span style='color:red'>Failed to {action_name}: "
-                    f"{html.escape(str(exc))}</span>"
+                self._action_status.value = _state_span(
+                    "error", f"Failed to {action_name}: {exc}"
                 )
             finally:
                 # Re-enable the buttons before refreshing the process list:
@@ -1142,9 +1149,8 @@ class ProcessControlWidget(ControlSectionWidget):
                 try:
                     self.process_list.update()
                 except Exception as exc:
-                    self._action_status.value += (
-                        "<br><span style='color:red'>Failed to refresh the "
-                        f"process list: {html.escape(str(exc))}</span>"
+                    self._action_status.value += "<br>" + _state_span(
+                        "error", f"Failed to refresh the process list: {exc}"
                     )
 
         threading.Thread(target=worker, daemon=True).start()
@@ -1157,14 +1163,18 @@ class Profile(ipw.HBox):
         label = f"{profile.name} (default)" if is_default else profile.name
         self.name = ipw.HTML(f"""<font size="3"> * {label}</font>""")
 
-        self.make_default = ipw.Button(description="Make default", button_style="info")
+        self.make_default = ipw.Button(
+            description="Make default", button_style="info", icon="star"
+        )
         if is_default:
             self.make_default.disabled = True
             self.make_default.tooltip = "Already the default profile"
         else:
             self.make_default.on_click(lambda _: on_make_default(profile.name))
 
-        self.delete = ipw.Button(description="Delete", button_style="danger")
+        self.delete = ipw.Button(
+            description="Delete", button_style="danger", icon="trash"
+        )
         if is_loaded:
             self.delete.disabled = True
             self.delete.tooltip = "This profile is currently in use by this notebook and cannot be deleted"
@@ -1186,10 +1196,10 @@ class ProfileControlWidget(ControlSectionWidget):
             value=False,
         )
         self._confirm_button = ipw.Button(
-            description="Confirm delete", button_style="danger"
+            description="Confirm delete", button_style="danger", icon="trash"
         )
         self._confirm_button.on_click(self._on_confirm_delete)
-        self._cancel_button = ipw.Button(description="Cancel")
+        self._cancel_button = ipw.Button(description="Cancel", icon="times")
         self._cancel_button.on_click(self._on_cancel_delete)
         self._confirm_box = ipw.VBox(
             children=[
@@ -1313,6 +1323,7 @@ class DangerZoneWidget(ControlSectionWidget):
             description="Schedule factory reset",
             button_style="danger",
             disabled=True,
+            icon="exclamation-triangle",
         )
         self._schedule_button.on_click(self._on_schedule_clicked)
         self._schedule_status = ipw.HTML()
@@ -1332,7 +1343,9 @@ class DangerZoneWidget(ControlSectionWidget):
         self._on_mode_change({"new": self._mode_radio.value})
 
         self._scheduled_alert = ipw.HTML()
-        self._cancel_button = ipw.Button(description="Cancel scheduled reset")
+        self._cancel_button = ipw.Button(
+            description="Cancel scheduled reset", icon="undo"
+        )
         self._cancel_button.on_click(self._on_cancel_clicked)
         self._cancel_status = ipw.HTML()
         self._scheduled_box = ipw.VBox(
@@ -1350,7 +1363,7 @@ class DangerZoneWidget(ControlSectionWidget):
                 self._scheduled_box,
             ],
         )
-        self.layout.border = "1px solid #d73a49"
+        self.layout.border = f"1px solid {Theme.COLORS.DANGER}"
         self.layout.padding = "12px"
         self.refresh()
 
@@ -1368,15 +1381,15 @@ class DangerZoneWidget(ControlSectionWidget):
             _FACTORY_RESET_FILE.write_text(mode)
             written_back = _FACTORY_RESET_FILE.read_text()
         except Exception as exc:
-            self._schedule_status.value = (
-                f"<span style='color:red'>Failed to schedule factory reset: "
-                f"{html.escape(str(exc))}</span>"
+            self._schedule_status.value = _state_span(
+                "error", f"Failed to schedule factory reset: {exc}"
             )
             return
         if written_back != mode:
-            self._schedule_status.value = (
-                "<span style='color:red'>Failed to schedule factory reset: "
-                "could not verify the flag file content</span>"
+            self._schedule_status.value = _state_span(
+                "error",
+                "Failed to schedule factory reset: could not verify the flag "
+                "file content",
             )
             return
         self._confirm_text.value = ""
@@ -1387,9 +1400,8 @@ class DangerZoneWidget(ControlSectionWidget):
         try:
             _FACTORY_RESET_FILE.unlink(missing_ok=True)
         except Exception as exc:
-            self._cancel_status.value = (
-                f"<span style='color:red'>Failed to cancel the scheduled reset: "
-                f"{html.escape(str(exc))}</span>"
+            self._cancel_status.value = _state_span(
+                "error", f"Failed to cancel the scheduled reset: {exc}"
             )
             return
         self._cancel_status.value = ""
@@ -1399,7 +1411,7 @@ class DangerZoneWidget(ControlSectionWidget):
         env_value = os.environ.get("AIIDALAB_FACTORY_RESET")
         if env_value and env_value != "0":
             self._env_warning.value = (
-                "<div style='color:red'><b>Warning:</b> the "
+                f"<div style='color:{_STATE_COLORS['error']}'><b>Warning:</b> the "
                 "<code>AIIDALAB_FACTORY_RESET</code> environment variable is "
                 f"set (<code>{html.escape(env_value)}</code>) and takes "
                 "precedence over anything configured here.</div>"
