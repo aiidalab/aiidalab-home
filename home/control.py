@@ -822,13 +822,18 @@ class StorageWidget(ControlSectionWidget):
         self._table = ipw.HTML()
 
         self._dry_run_checkbox = ipw.Checkbox(
-            description="Dry run (only report what would be done)", value=True
+            description="Dry run (only report what would be done)",
+            value=True,
+            indent=False,
+            layout={"width": "fit-content"},
         )
         self._full_checkbox = ipw.Checkbox(
             description=(
                 "Full maintenance (requires exclusive access; stop the daemon first)"
             ),
             value=False,
+            indent=False,
+            layout={"width": "fit-content"},
         )
         self._maintain_button = ipw.Button(
             description="Run maintenance", button_style="warning", icon="wrench"
@@ -1396,6 +1401,7 @@ class DangerZoneWidget(ControlSectionWidget):
             button_style="danger",
             disabled=True,
             icon="exclamation-triangle",
+            layout={"width": "fit-content"},
         )
         self._schedule_button.on_click(self._on_schedule_clicked)
         self._schedule_status = ipw.HTML()
@@ -1407,8 +1413,12 @@ class DangerZoneWidget(ControlSectionWidget):
                 ),
                 self._mode_radio,
                 self._mode_details,
-                self._confirm_text,
-                self._schedule_button,
+                ipw.HBox(
+                    children=[
+                        self._confirm_text,
+                        self._schedule_button,
+                    ]
+                ),
                 self._schedule_status,
             ]
         )
