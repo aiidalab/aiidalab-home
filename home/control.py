@@ -91,7 +91,11 @@ class ControlSectionWidget(ipw.VBox):
         threading.Thread(target=worker, daemon=True).start()
 
     def _do_refresh(self):
-        """Synchronous probe/update; subclasses override."""
+        """Synchronous probe/update; subclasses override.
+
+        Runs on a background thread — avoid direct ipywidgets state
+        mutation here except via the thread-safe show_*/info hooks.
+        """
 
 
 class DaemonControlWidget(ControlSectionWidget):
