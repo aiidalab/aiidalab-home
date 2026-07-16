@@ -1,6 +1,6 @@
-import datetime
 import html
 import threading
+from datetime import datetime
 
 import ipywidgets as ipw
 
