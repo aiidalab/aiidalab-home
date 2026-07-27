@@ -27,7 +27,7 @@ class ControlSectionWidget(ipw.VBox):
 
     description = ""
 
-    def __init__(self, children):
+    def __init__(self, children, show_refresh_button=True):
         self._refreshing = False
 
         header_children = []
@@ -39,11 +39,18 @@ class ControlSectionWidget(ipw.VBox):
                 )
             )
 
-        self.refresh_button = ipw.Button(description="Refresh", icon="refresh")
-        self.refresh_button.on_click(self.refresh)
-        self._last_updated = ipw.HTML()
+        self.refresh_button = None
+        self._last_updated = None
+        footer_children = []
+        if show_refresh_button:
+            self.refresh_button = ipw.Button(description="Refresh", icon="refresh")
+            self.refresh_button.on_click(self.refresh)
+            footer_children.append(self.refresh_button)
+            self._last_updated = ipw.HTML()
+            footer_children.append(self._last_updated)
         self.info = ipw.HTML()
-        footer = ipw.HBox([self.refresh_button, self._last_updated, self.info])
+        footer_children.append(self.info)
+        footer = ipw.HBox(footer_children)
 
         super().__init__(
             children=[*header_children, *children, footer],
@@ -67,7 +74,8 @@ class ControlSectionWidget(ipw.VBox):
             return
         self._refreshing = True
         self.info.value = "Refreshing... <i class='fa fa-spinner fa-spin'></i>"
-        self.refresh_button.disabled = True
+        if self.refresh_button is not None:
+            self.refresh_button.disabled = True
 
         def worker():
             try:
@@ -82,11 +90,13 @@ class ControlSectionWidget(ipw.VBox):
                 # Re-enable the button before touching anything else: if a
                 # later step raises, the page must not be left with the
                 # button permanently disabled.
-                self.refresh_button.disabled = False
+                if self.refresh_button is not None:
+                    self.refresh_button.disabled = False
                 self._refreshing = False
-                self._last_updated.value = (
-                    f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
-                )
+                if self._last_updated is not None:
+                    self._last_updated.value = (
+                        f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
+                    )
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -144,4 +154,4 @@ class DangerZoneWidget(ControlSectionWidget):
     description = "Irreversible actions that can lead to data loss."
 
     def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+        super().__init__([ipw.HTML("To be implemented.")], show_refresh_button=False)
