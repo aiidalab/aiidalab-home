@@ -73,9 +73,9 @@ class ControlSectionWidget(ipw.VBox):
         if self._refreshing:
             return
         self._refreshing = True
-        self.info.value = "Refreshing... <i class='fa fa-spinner fa-spin'></i>"
         if self.refresh_button is not None:
             self.refresh_button.disabled = True
+        self.info.value = "Refreshing... <i class='fa fa-spinner fa-spin'></i>"
 
         def worker():
             try:
