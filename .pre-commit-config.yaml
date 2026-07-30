@@ -17,8 +17,13 @@ repos:
       rev: v0.15.20
       hooks:
           - id: ruff-format
-          - id: ruff
+          - id: ruff-check
             args: [--fix, --exit-non-zero-on-fix, --show-fixes]
+
+    - repo: https://github.com/astral-sh/ty-pre-commit
+      rev: v0.0.65
+      hooks:
+          - id: ty
 
     - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
       rev: 0.2.3

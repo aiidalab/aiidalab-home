@@ -6,10 +6,10 @@ build-backend = "setuptools.build_meta"
 [tool.ruff]
 line-length = 88
 show-fixes = true
-target-version = "py38"
+target-version = "py39"
 
 [tool.ruff.lint]
-ignore = ["E501", "E402", "B904", "TRY003"]
+ignore = ["E501", "E402", "B904", "TRY003", "PLC0415"]
 select = [
   "A",    # flake8-builtins
   "ARG",  # flake8-unused-arguments
@@ -30,3 +30,12 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ARG001"]
 "tests_notebooks/*" = ["ARG001"]
+
+# TODO: Fix type errors in these files
+[[tool.ty.overrides]]
+include = [
+  "home/code_setup.py",
+  "home/computational_resources.py",
+]
+[tool.ty.overrides.rules]
+all = "ignore"
