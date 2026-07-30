@@ -86,6 +86,10 @@ class ControlSectionWidget(ipw.VBox):
                 # Silent success: the "Last updated" timestamp below already
                 # signals success, so no "refreshed" message is shown.
                 self.info.value = ""
+                if self._last_updated is not None:
+                    self._last_updated.value = (
+                        f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
+                    )
             finally:
                 # Re-enable the button before touching anything else: if a
                 # later step raises, the page must not be left with the
@@ -93,10 +97,6 @@ class ControlSectionWidget(ipw.VBox):
                 if self.refresh_button is not None:
                     self.refresh_button.disabled = False
                 self._refreshing = False
-                if self._last_updated is not None:
-                    self._last_updated.value = (
-                        f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
-                    )
 
         threading.Thread(target=worker, daemon=True).start()
 

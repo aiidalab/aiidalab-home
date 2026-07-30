@@ -54,3 +54,4 @@ def test_refresh_shows_error_on_exception(run_threads_synchronously):
     assert "Failed to refresh" in widget.info.value
     assert widget.refresh_button.disabled is False
     assert widget._refreshing is False
+    assert widget._last_updated.value == ""
