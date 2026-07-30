@@ -94,9 +94,9 @@ class ControlSectionWidget(ipw.VBox):
                 # Re-enable the button before touching anything else: if a
                 # later step raises, the page must not be left with the
                 # button permanently disabled.
+                self._refreshing = False
                 if self.refresh_button is not None:
                     self.refresh_button.disabled = False
-                self._refreshing = False
 
         threading.Thread(target=worker, daemon=True).start()
 
