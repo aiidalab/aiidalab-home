@@ -104,5 +104,8 @@ jobs:
 
             - uses: actions/checkout@v7
 
+            - name: Install dependencies
+              run: uv pip install -e .[dev]
+
             - name: Run pre-commit
               run: pre-commit run --all-files || (git status --short; git diff; exit 1)
