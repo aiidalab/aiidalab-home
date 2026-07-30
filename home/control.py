@@ -154,4 +154,4 @@ class DangerZoneWidget(ControlSectionWidget):
     description = "Irreversible actions that can lead to data loss."
 
     def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")], show_refresh_button=False)
+        super().__init__([ipw.HTML("To be implemented.")])
