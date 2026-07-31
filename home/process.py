@@ -656,13 +656,13 @@ class ProcessListWidget(ipw.VBox):
         if self.incoming_node:
             relationships = {
                 **relationships,
-                **{"with_outgoing": orm.load_node(self.incoming_node)},
+                "with_outgoing": orm.load_node(self.incoming_node),
             }
 
         if self.outgoing_node:
             relationships = {
                 **relationships,
-                **{"with_incoming": orm.load_node(self.outgoing_node)},
+                "with_incoming": orm.load_node(self.outgoing_node),
             }
 
         query_set = builder.get_query_set(

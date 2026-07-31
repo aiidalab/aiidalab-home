@@ -23,7 +23,7 @@ def run_threads_synchronously(monkeypatch):
     assertions don't race the thread's completion."""
 
     class _SyncThread:
-        def __init__(self, target, daemon=None):  # noqa: ARG002
+        def __init__(self, target, daemon=None):
             self._target = target
 
         def start(self):

@@ -1,7 +1,5 @@
 """Helpers for optional node previews."""
 
-from __future__ import annotations
-
 import ipywidgets as ipw
 
 AWB_UNAVAILABLE_MESSAGE = (
