@@ -354,7 +354,7 @@ class ProcessInputsWidget(ipw.VBox):
 
     def generate_flat_mapping(
         self, process: orm.ProcessNode | None = None
-    ) -> None | dict[str, str]:
+    ) -> dict[str, str] | None:
         """Generate a dict of input to node uuid mapping.
 
         If the input port is a namespace, it will further parse the namespace and attach the entity the
@@ -652,13 +652,13 @@ class ProcessListWidget(ipw.VBox):
         if self.incoming_node:
             relationships = {
                 **relationships,
-                **{"with_outgoing": orm.load_node(self.incoming_node)},
+                "with_outgoing": orm.load_node(self.incoming_node),
             }
 
         if self.outgoing_node:
             relationships = {
                 **relationships,
-                **{"with_incoming": orm.load_node(self.outgoing_node)},
+                "with_incoming": orm.load_node(self.outgoing_node),
             }
 
         query_set = builder.get_query_set(

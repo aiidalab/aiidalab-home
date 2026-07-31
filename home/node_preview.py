@@ -13,7 +13,7 @@ AWB_UNAVAILABLE_MESSAGE = (
 def render_node_preview(node):
     """Render a node preview using AWB when it is available."""
     try:
-        from aiidalab_widgets_base import viewer  # noqa: PLC0415
+        from aiidalab_widgets_base import viewer
     except ImportError:
         return ipw.HTML(
             value=str(node) + "<br><em>" + AWB_UNAVAILABLE_MESSAGE + "</em>"
