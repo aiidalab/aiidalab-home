@@ -227,7 +227,7 @@ class ComputationalResourcesDatabaseWidget(ipw.VBox):
             if len(domain_value) == 0:
                 del database[domain]
             elif domain_value.get("default") not in domain_value:
-                domain_value["default"] = sorted(domain_value.keys() - {"default"})[0]
+                domain_value["default"] = min(domain_value.keys() - {"default"})
 
         return database
 
@@ -246,7 +246,7 @@ class ComputationalResourcesDatabaseWidget(ipw.VBox):
             with self.hold_trait_notifications():
                 self.computer_selector.options = tuple(
                     key
-                    for key in self.database.get(selected_domain, {}).keys()
+                    for key in self.database.get(selected_domain, {})
                     if key != "default"
                 )
                 self.computer_selector.value = self.database.get(
@@ -731,9 +731,7 @@ class SshComputerSetup(ipw.VBox):
         # NOTE: parse_sshconfig returns a dict with a hostname
         # even if it is not in the config file.
         # We require at least the user to be specified.
-        if "user" not in sshcfg:
-            return False
-        return True
+        return "user" in sshcfg
 
     def _write_ssh_config(self):
         """Put host information into the config file."""
@@ -1502,7 +1500,7 @@ class AiidaCodeSetup(ipw.VBox):
 
             # Check for additional keys needed for orm.ContainerizedCode
             for container_key in containerized_code_additional_items:
-                if container_key in self.code_setup.keys():
+                if container_key in self.code_setup:
                     kwargs[container_key] = self.code_setup[container_key]
 
             # set computer from its widget value the UUID of the computer.

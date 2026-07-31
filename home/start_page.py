@@ -64,7 +64,8 @@ class AiidaLabHome:
         self.write_config(config)
 
     def write_config(self, config):
-        json.dump(config, open(self.config_fn, "w"), indent=2)
+        with open(self.config_fn, "w") as f:
+            json.dump(config, f, indent=2)
 
     def read_config(self):
         if path.exists(self.config_fn):
