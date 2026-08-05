@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+from typing import TypedDict
+
 import ipywidgets as ipw
 from aiida import orm
 from aiida.common.exceptions import NotExistent
 from IPython.display import display
 
-CONFIG = {
+
+class ConfigType(TypedDict):
+    column_widths: dict[str, str]
+    cell_style: dict[str, str]
+    rows_per_page: int
+
+
+CONFIG: ConfigType = {
     "column_widths": {
         "Full label": "25%",
         "Executable path": "65%",
@@ -21,7 +30,7 @@ def fetch_code_data():
     codes: list[orm.Code] = orm.Code.collection.all()
     return [
         {
-            "Full label": f"{code.label}@{code.computer.label}",
+            "Full label": f"{code.label}@{code.computer.label}",  # ty: ignore[unresolved-attribute]
             "Executable path": code.get_executable().as_posix(),
             "Hide": code.is_hidden,
         }
@@ -52,7 +61,7 @@ def create_row(row, on_checkbox_change):
         tooltip="Check to hide this code in code selection widgets",
         layout=ipw.Layout(width="fit-content", margin="2px 2px 2px 15px"),
     )
-    hide_checkbox.full_label = row["Full label"]
+    hide_checkbox.full_label = row["Full label"]  # ty: ignore[unresolved-attribute]
     hide_checkbox.observe(on_checkbox_change, names="value")
     table_row = ipw.HBox(
         children=[
@@ -184,7 +193,7 @@ def create_paginated_table(data: list[dict]):
 
         rpg = CONFIG["rows_per_page"]
         total_pages = (len(visible_data) + rpg - 1) // rpg
-        current_page.max = max(total_pages, 1)
+        current_page.max = max(total_pages, 1)  # ty: ignore[unresolved-attribute]
 
         if total_pages == 0:
             current_page.value = 1

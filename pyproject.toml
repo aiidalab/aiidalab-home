@@ -10,12 +10,3 @@ target-version = "py39"
 
 [tool.ruff.lint]
 ignore = ["BLE001"]
-
-# TODO: Fix type errors in these files
-[[tool.ty.overrides]]
-include = [
-  "home/code_setup.py",
-  "home/computational_resources.py",
-]
-[tool.ty.overrides.rules]
-all = "ignore"
