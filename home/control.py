@@ -39,8 +39,6 @@ class ControlSectionWidget(ipw.VBox):
                 )
             )
 
-        self.refresh_button = None
-        self._last_updated = None
         footer_children = []
         if show_refresh_button:
             self.refresh_button = ipw.Button(description="Refresh", icon="refresh")
@@ -48,6 +46,9 @@ class ControlSectionWidget(ipw.VBox):
             footer_children.append(self.refresh_button)
             self._last_updated = ipw.HTML()
             footer_children.append(self._last_updated)
+        else:
+            self.refresh_button = None
+            self._last_updated = None
         self.info = ipw.HTML()
         footer_children.append(self.info)
         footer = ipw.HBox(footer_children)

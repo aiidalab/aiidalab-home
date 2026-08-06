@@ -231,7 +231,7 @@ class ComputationalResourcesDatabaseWidget(ipw.VBox):
 
         return database
 
-    def _domain_changed(self, change=None):
+    def _domain_changed(self, change):
         """Callback when new domain selected."""
         with self.hold_trait_notifications():
             if change["new"] is None:
@@ -253,7 +253,7 @@ class ComputationalResourcesDatabaseWidget(ipw.VBox):
                     selected_domain, {}
                 ).get("default")
 
-    def _computer_changed(self, change=None):
+    def _computer_changed(self, change):
         """Callback when new computer selected."""
         with self.hold_trait_notifications():
             if change["new"] is None:
@@ -287,7 +287,7 @@ class ComputationalResourcesDatabaseWidget(ipw.VBox):
 
         self._set_configured()
 
-    def _code_changed(self, change=None):
+    def _code_changed(self, change):
         """Update code settings."""
         if change["new"] is None:
             self.code_setup = {}
@@ -385,7 +385,7 @@ class ComputationalResourcesWidget(ipw.VBox):
             self.refresh, names=["allow_disabled_computers", "allow_hidden_codes"]
         )
 
-        self._default_user_email = orm.User.collection.get_default().email
+        self._default_user_email = orm.User.collection.get_default().email  # ty: ignore[unresolved-attribute]
 
         selection_row = ipw.HBox(
             children=[
@@ -811,7 +811,7 @@ class SshComputerSetup(ipw.VBox):
         while True:
             try:
                 idx = self._ssh_connection_process.expect(
-                    self.SSH_POSSIBLE_RESPONSES,
+                    self.SSH_POSSIBLE_RESPONSES,  # ty: ignore[invalid-argument-type]
                     timeout=timeout,
                 )
                 self.ssh_connection_state = SshConnectionState(idx)
@@ -835,6 +835,7 @@ class SshComputerSetup(ipw.VBox):
 
     def _send_password(self, _=None):
         self._continue_with_password_button.disabled = True
+        assert self._ssh_connection_process is not None
         self._ssh_connection_process.sendline(self._ssh_password.value)
 
     @tl.observe("ssh_connection_state")
@@ -869,21 +870,30 @@ class SshComputerSetup(ipw.VBox):
         if self.ssh_connection_state is SshConnectionState.enter_password:
             self._handle_ssh_password()
         elif self.ssh_connection_state is SshConnectionState.do_you_want_to_continue:
+            assert self._ssh_connection_process is not None
             self._ssh_connection_process.sendline("yes")
 
     def _handle_ssh_password(self):
         """Send a password to a remote computer."""
-        message = (
-            self._ssh_connection_process.before.splitlines()[-1]
-            + self._ssh_connection_process.after
-        )
+        assert self._ssh_connection_process is not None
+        if self._ssh_connection_process.before:
+            message = (
+                self._ssh_connection_process.before.splitlines()[-1]
+                + self._ssh_connection_process.after
+            )
+        else:
+            message = self._ssh_connection_process.after
+
         if self._ssh_connection_message == message:
             self._ssh_connection_process.sendline(self._ssh_password.value)
         else:
+            # TODO: Resolve this ty: ignore, the error is:
+            # error[unresolved-attribute]: Attribute `decode` is not defined on
+            # `type[EOF]`, `type[TIMEOUT]`, `None` in union `(Unknown & ~Literal[b"Password:"]) | type[EOF | TIMEOUT] | None`
             self.password_message = (
                 f"Please enter {self.username.value}@{self.hostname.value}'s password:"
                 if message == b"Password:"
-                else f"Please enter {message.decode('utf-8')}"
+                else f"Please enter {message.decode('utf-8')}"  # ty: ignore[unresolved-attribute]
             )
             self._ssh_password.disabled = False
             self._continue_with_password_button.disabled = False
@@ -950,7 +960,7 @@ class AiidaComputerSetup(ipw.VBox):
 
     def __init__(self, **kwargs):
         self._on_setup_computer_success = []
-        self._default_user_email = orm.User.collection.get_default().email
+        self._default_user_email = orm.User.collection.get_default().email  # ty: ignore[unresolved-attribute]
 
         # List of widgets to be displayed.
         self.label = ipw.Text(
@@ -1625,7 +1635,7 @@ class ComputerDropdownWidget(ipw.VBox):
 
         description (str): Text to display before dropdown.
         """
-        self._default_user_email = orm.User.collection.get_default().email
+        self._default_user_email = orm.User.collection.get_default().email  # ty: ignore[unresolved-attribute]
 
         self.output = ipw.HTML()
         self._dropdown = ipw.Dropdown(

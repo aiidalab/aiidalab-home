@@ -384,7 +384,7 @@ class ProcessInputsWidget(ipw.VBox):
 
         return options_map
 
-    def show_selected_input(self, change=None):
+    def show_selected_input(self, change):
         """Function that displays process inputs selected in the `inputs` Dropdown widget."""
         with self.output:
             self.info.value = ""
@@ -506,8 +506,10 @@ class ProcessOutputsWidget(ipw.VBox):
             children=[ipw.HBox([outputs, self.info]), self.output], **kwargs
         )
 
-    def show_selected_output(self, change=None):
+    def show_selected_output(self, change):
         """Function that displays process output selected in the `outputs` Dropdown widget."""
+        if self.process is None:
+            return
         with self.output:
             self.info.value = ""
             clear_output()
@@ -598,6 +600,8 @@ class ProgressBarWidget(ipw.VBox):
 
     @property
     def current_state(self):
+        if self.process is None or self.process.process_state is None:
+            return None
         return self.process.process_state.value
 
 
@@ -646,7 +650,7 @@ class ProcessListWidget(ipw.VBox):
             process_state=self.process_states,
             process_label=self.process_label,
             exit_status=None,
-            failed=None,
+            failed=False,
         )
         relationships = {}
         if self.incoming_node:

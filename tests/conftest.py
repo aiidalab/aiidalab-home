@@ -74,5 +74,5 @@ def multiply_add_completed_workchain(aiida_local_code_bash):
         "z": orm.Int(3),
         "code": aiida_local_code_bash,
     }
-    _, process = engine.run_get_node(MultiplyAddWorkChain, **inputs)
+    _, process = engine.run_get_node(MultiplyAddWorkChain, **inputs)  # ty: ignore[invalid-argument-type]
     return process
