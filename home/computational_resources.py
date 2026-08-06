@@ -385,7 +385,7 @@ class ComputationalResourcesWidget(ipw.VBox):
             self.refresh, names=["allow_disabled_computers", "allow_hidden_codes"]
         )
 
-        self._default_user_email = orm.User.collection.get_default().email
+        self._default_user_email = orm.User.collection.get_default().email  # ty: ignore[unresolved-attribute]
 
         selection_row = ipw.HBox(
             children=[
@@ -960,7 +960,7 @@ class AiidaComputerSetup(ipw.VBox):
 
     def __init__(self, **kwargs):
         self._on_setup_computer_success = []
-        self._default_user_email = orm.User.collection.get_default().email
+        self._default_user_email = orm.User.collection.get_default().email  # ty: ignore[unresolved-attribute]
 
         # List of widgets to be displayed.
         self.label = ipw.Text(
@@ -1635,7 +1635,7 @@ class ComputerDropdownWidget(ipw.VBox):
 
         description (str): Text to display before dropdown.
         """
-        self._default_user_email = orm.User.collection.get_default().email
+        self._default_user_email = orm.User.collection.get_default().email  # ty: ignore[unresolved-attribute]
 
         self.output = ipw.HTML()
         self._dropdown = ipw.Dropdown(

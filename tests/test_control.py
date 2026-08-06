@@ -53,9 +53,13 @@ def test_refresh_guards_reentry(run_threads_synchronously, monkeypatch):
 
 
 def test_refresh_shows_error_on_exception(run_threads_synchronously):
-    widget = _DummySection(fail=True)
+    widget = _DummySection(fail=True, show_refresh_button=True)
+    assert widget.refresh_button is not None
+    assert widget._last_updated is not None
+
     widget.refresh()
+
     assert "Failed to refresh" in widget.info.value
-    assert widget.refresh_button.disabled is False  # ty: ignore[unresolved-attribute]
+    assert widget.refresh_button.disabled is False
     assert widget._refreshing is False
-    assert widget._last_updated.value == ""  # ty: ignore[unresolved-attribute]
+    assert widget._last_updated.value == ""

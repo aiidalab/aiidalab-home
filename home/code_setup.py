@@ -27,7 +27,7 @@ CONFIG: ConfigType = {
 
 def fetch_code_data():
     """Fetch AiiDA code instances and format them into a list of dictionaries."""
-    codes: list[orm.Code] = orm.Code.collection.all()
+    codes: list[orm.Code] = orm.Code.collection.all()  # ty: ignore[invalid-assignment]
     return [
         {
             "Full label": f"{code.label}@{code.computer.label}",  # ty: ignore[unresolved-attribute]
@@ -149,7 +149,7 @@ def create_paginated_table(data: list[dict]):
 
     def unhide_all_codes():
         for code in orm.Code.collection.all():
-            full_label = f"{code.label}@{code.computer.label}"
+            full_label = f"{code.label}@{code.computer.label}"  # ty: ignore[unresolved-attribute]
             update_code_visibility(full_label, False)
 
     def generate_page_buttons(total_pages):
