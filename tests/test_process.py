@@ -21,7 +21,7 @@ def capture_display(monkeypatch):
 def test_render_node_preview_uses_awb_when_available(monkeypatch):
     node = orm.Int(1)
     module = types.ModuleType("aiidalab_widgets_base")
-    module.viewer = lambda _: "mock-viewer"
+    module.viewer = lambda _: "mock-viewer"  # ty: ignore[unresolved-attribute]
 
     monkeypatch.setitem(sys.modules, "aiidalab_widgets_base", module)
 

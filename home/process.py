@@ -354,7 +354,7 @@ class ProcessInputsWidget(ipw.VBox):
 
     def generate_flat_mapping(
         self, process: orm.ProcessNode | None = None
-    ) -> None | dict[str, str]:
+    ) -> dict[str, str] | None:
         """Generate a dict of input to node uuid mapping.
 
         If the input port is a namespace, it will further parse the namespace and attach the entity the
@@ -384,7 +384,7 @@ class ProcessInputsWidget(ipw.VBox):
 
         return options_map
 
-    def show_selected_input(self, change=None):
+    def show_selected_input(self, change):
         """Function that displays process inputs selected in the `inputs` Dropdown widget."""
         with self.output:
             self.info.value = ""
@@ -506,8 +506,10 @@ class ProcessOutputsWidget(ipw.VBox):
             children=[ipw.HBox([outputs, self.info]), self.output], **kwargs
         )
 
-    def show_selected_output(self, change=None):
+    def show_selected_output(self, change):
         """Function that displays process output selected in the `outputs` Dropdown widget."""
+        if self.process is None:
+            return
         with self.output:
             self.info.value = ""
             clear_output()
@@ -598,6 +600,8 @@ class ProgressBarWidget(ipw.VBox):
 
     @property
     def current_state(self):
+        if self.process is None or self.process.process_state is None:
+            return None
         return self.process.process_state.value
 
 
@@ -646,19 +650,19 @@ class ProcessListWidget(ipw.VBox):
             process_state=self.process_states,
             process_label=self.process_label,
             exit_status=None,
-            failed=None,
+            failed=False,
         )
         relationships = {}
         if self.incoming_node:
             relationships = {
                 **relationships,
-                **{"with_outgoing": orm.load_node(self.incoming_node)},
+                "with_outgoing": orm.load_node(self.incoming_node),
             }
 
         if self.outgoing_node:
             relationships = {
                 **relationships,
-                **{"with_incoming": orm.load_node(self.outgoing_node)},
+                "with_incoming": orm.load_node(self.outgoing_node),
             }
 
         query_set = builder.get_query_set(

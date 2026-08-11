@@ -16,10 +16,10 @@ from home.control import (
 
 
 class _DummySection(ControlSectionWidget):
-    def __init__(self, fail=False):
+    def __init__(self, show_refresh_button=True, fail=False):
         self.fail = fail
         self.refresh_calls = 0
-        super().__init__([])
+        super().__init__([], show_refresh_button=show_refresh_button)
 
     def _do_refresh(self):
         self.refresh_calls += 1
@@ -33,7 +33,7 @@ def run_threads_synchronously(monkeypatch):
     assertions don't race the thread's completion."""
 
     class _SyncThread:
-        def __init__(self, target, daemon=None):  # noqa: ARG002
+        def __init__(self, target, daemon=None):
             self._target = target
 
         def start(self):
@@ -43,7 +43,11 @@ def run_threads_synchronously(monkeypatch):
 
 
 def test_refresh_calls_do_refresh(run_threads_synchronously):
-    widget = _DummySection()
+    widget = _DummySection(show_refresh_button=True)
+
+    assert widget.refresh_button is not None
+    assert widget._last_updated is not None
+
     widget.refresh()
     assert widget.refresh_calls == 1
     assert widget.refresh_button.disabled is False
@@ -59,8 +63,12 @@ def test_refresh_guards_reentry(run_threads_synchronously, monkeypatch):
 
 
 def test_refresh_shows_error_on_exception(run_threads_synchronously):
-    widget = _DummySection(fail=True)
+    widget = _DummySection(fail=True, show_refresh_button=True)
+    assert widget.refresh_button is not None
+    assert widget._last_updated is not None
+
     widget.refresh()
+
     assert "Failed to refresh" in widget.info.value
     assert widget.refresh_button.disabled is False
     assert widget._refreshing is False

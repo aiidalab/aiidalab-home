@@ -8,6 +8,7 @@ apps_meta.sqlite
 *.egg-info
 aiidalab_home.egg-info/*
 build/*
+uv.lock
 
 # Transient per-session notebook copies created by Appmode.
 *-[0-9].ipynb
