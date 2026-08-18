@@ -112,6 +112,14 @@ def test_storage_summary_unknown_backend_returns_none():
     assert _storage_summary(profile) is None
 
 
+def test_storage_summary_psql_dos_missing_key_returns_none():
+    profile = SimpleNamespace(
+        storage_backend="core.psql_dos",
+        storage_config={"database_name": "aiidadb"},  # missing host/port
+    )
+    assert _storage_summary(profile) is None
+
+
 def test_daemon_status_running():
     client = SimpleNamespace(is_daemon_running=True, get_number_of_workers=lambda: 3)
     state, text = _daemon_status(client)
@@ -153,3 +161,14 @@ def test_status_overview_do_refresh(aiida_profile, run_threads_synchronously):
     ]
     assert len(checked_rows) == 3
     assert not any(_STATE_COLORS["error"] in row for row in checked_rows)
+
+
+def test_status_overview_no_broker(
+    aiida_profile, run_threads_synchronously, monkeypatch
+):
+    import home.control as control_module
+
+    monkeypatch.setattr(control_module.manage.get_manager(), "get_broker", lambda: None)
+    widget = StatusOverviewWidget()
+    widget.refresh()
+    assert "No broker configured" in widget._status.value
