@@ -209,73 +209,60 @@ class StatusOverviewWidget(ControlSectionWidget):
             f"</tr>"
         )
 
+    def _probe_version(self):
+        return self._status_row("ok", "version", f"AiiDA v{aiida.__version__}")
+
+    def _probe_config(self):
+        return self._status_row("ok", "config", manage.get_config().dirpath)
+
+    def _probe_profile(self):
+        # Stashed for `_probe_storage`, which needs to know whether a
+        # profile is loaded; reset at the top of every `_do_refresh`.
+        if self._profile is None:
+            return self._status_row("error", "profile", "No profile loaded")
+        return self._status_row("ok", "profile", self._profile.name)
+
+    def _probe_storage(self):
+        if self._profile is None:
+            return self._status_row("error", "storage", "No profile loaded")
+        # The storage object is cached, so it does not re-verify the
+        # connection; run a cheap query to actually probe the database.
+        orm.QueryBuilder().append(orm.User).count()
+        storage = manage.get_manager().get_profile_storage()
+        storage_text = str(storage)
+        summary = _storage_summary(self._profile) or storage_text
+        return self._status_row("ok", "storage", summary, tooltip=storage_text)
+
+    def _probe_broker(self):
+        broker = manage.get_manager().get_broker()
+        if broker is None:
+            return self._status_row("warning", "broker", "No broker configured")
+        sanitized = _sanitize_broker_url(str(broker))
+        return self._status_row("ok", "broker", sanitized, tooltip=sanitized)
+
+    def _probe_daemon(self):
+        state, text = _daemon_status(self._daemon)
+        return self._status_row(state, "daemon", text)
+
+    def _run_probe(self, label, probe):
+        """Run `probe()` and return its row, or an error row if it raises."""
+        try:
+            return probe()
+        except Exception as exc:
+            logger.exception("Status overview: %s probe failed", label)
+            return self._status_row("error", label, str(exc))
+
     def _do_refresh(self):
-        rows = []
-
-        try:
-            rows.append(
-                self._status_row("ok", "version", f"AiiDA v{aiida.__version__}")
-            )
-        except Exception as exc:
-            logger.exception("Status overview: version probe failed")
-            rows.append(self._status_row("error", "version", str(exc)))
-
-        try:
-            rows.append(self._status_row("ok", "config", manage.get_config().dirpath))
-        except Exception as exc:
-            logger.exception("Status overview: config probe failed")
-            rows.append(self._status_row("error", "config", str(exc)))
-
-        profile = None
-        try:
-            profile = get_profile()
-            if profile is None:
-                rows.append(self._status_row("error", "profile", "No profile loaded"))
-            else:
-                rows.append(self._status_row("ok", "profile", profile.name))
-        except Exception as exc:
-            logger.exception("Status overview: profile probe failed")
-            rows.append(self._status_row("error", "profile", str(exc)))
-
-        if profile is None:
-            rows.append(self._status_row("error", "storage", "No profile loaded"))
-        else:
-            try:
-                # The storage object is cached, so it does not re-verify the
-                # connection; run a cheap query to actually probe the database.
-                orm.QueryBuilder().append(orm.User).count()
-                storage = manage.get_manager().get_profile_storage()
-                storage_text = str(storage)
-                summary = _storage_summary(profile) or storage_text
-                rows.append(
-                    self._status_row("ok", "storage", summary, tooltip=storage_text)
-                )
-            except Exception as exc:
-                logger.exception("Status overview: storage probe failed")
-                rows.append(self._status_row("error", "storage", str(exc)))
-
-        try:
-            broker = manage.get_manager().get_broker()
-            if broker is None:
-                rows.append(
-                    self._status_row("warning", "broker", "No broker configured")
-                )
-            else:
-                sanitized = _sanitize_broker_url(str(broker))
-                rows.append(
-                    self._status_row("ok", "broker", sanitized, tooltip=sanitized)
-                )
-        except Exception as exc:
-            logger.exception("Status overview: broker probe failed")
-            rows.append(self._status_row("error", "broker", str(exc)))
-
-        try:
-            state, text = _daemon_status(self._daemon)
-            rows.append(self._status_row(state, "daemon", text))
-        except Exception as exc:
-            logger.exception("Status overview: daemon probe failed")
-            rows.append(self._status_row("error", "daemon", str(exc)))
-
+        self._profile = get_profile()
+        probes = (
+            ("version", self._probe_version),
+            ("config", self._probe_config),
+            ("profile", self._probe_profile),
+            ("storage", self._probe_storage),
+            ("broker", self._probe_broker),
+            ("daemon", self._probe_daemon),
+        )
+        rows = [self._run_probe(label, probe) for label, probe in probes]
         self._status.value = (
             "<table style='border-collapse:collapse;'>" + "".join(rows) + "</table>"
         )
