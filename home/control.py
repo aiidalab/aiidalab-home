@@ -156,7 +156,7 @@ def _sanitize_broker_url(url) -> str:
     return re.sub(r"://[^@/ ]+@", "://", url)
 
 
-def _daemon_status(client) -> tuple:
+def _daemon_status(client) -> tuple[str, str]:
     """Lightweight (state, text) probe of the daemon: running + worker count.
 
     Does not fetch full worker info (that belongs to the daemon control
@@ -174,7 +174,7 @@ def _daemon_status(client) -> tuple:
 
 class StatusOverviewWidget(ControlSectionWidget):
     description = "Health of the services behind AiiDA."
-    _ROW_ICONS: ClassVar[dict] = {
+    _ROW_ICONS: ClassVar[dict[str, str]] = {
         "ok": Theme.ICONS.CHECK,
         "warning": Theme.ICONS.WARNING,
         "error": Theme.ICONS.TIMES_CIRCLE,
