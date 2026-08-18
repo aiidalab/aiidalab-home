@@ -223,18 +223,22 @@ class StatusOverviewWidget(ControlSectionWidget):
             logger.exception("Status overview: profile probe failed")
             rows.append(self._status_row("error", "profile", str(exc)))
 
-        try:
-            # The storage object is cached, so it does not re-verify the
-            # connection; run a cheap query to actually probe the database.
-            orm.QueryBuilder().append(orm.User).count()
-            storage = manage.get_manager().get_profile_storage()
-            storage_text = str(storage)
-            summary = _storage_summary(profile) or storage_text
-            rows.append(
-                self._status_row("ok", "storage", summary, tooltip=storage_text)
-            )
-        except Exception as exc:
-            rows.append(self._status_row("error", "storage", str(exc)))
+        if profile is None:
+            rows.append(self._status_row("error", "storage", "No profile loaded"))
+        else:
+            try:
+                # The storage object is cached, so it does not re-verify the
+                # connection; run a cheap query to actually probe the database.
+                orm.QueryBuilder().append(orm.User).count()
+                storage = manage.get_manager().get_profile_storage()
+                storage_text = str(storage)
+                summary = _storage_summary(profile) or storage_text
+                rows.append(
+                    self._status_row("ok", "storage", summary, tooltip=storage_text)
+                )
+            except Exception as exc:
+                logger.exception("Status overview: storage probe failed")
+                rows.append(self._status_row("error", "storage", str(exc)))
 
         try:
             broker = manage.get_manager().get_broker()
