@@ -106,6 +106,7 @@ def test_storage_summary_psql_dos():
         },
     )
     summary = _storage_summary(profile)
+    assert summary is not None
     assert "aiidadb" in summary
     assert "localhost:5432" in summary
     assert "s3cr3t" not in summary
