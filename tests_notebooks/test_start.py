@@ -21,12 +21,11 @@ def test_click_appstore(selenium_driver, final_screenshot):
     selenium.switch_to.window(handles.pop())
     time.sleep(5)
     selenium.set_window_size(1000, 1100)
-
     dropdown = selenium.find_element(
         By.XPATH,
         "//div[@id='notebook-container']/div[5]/div[2]/div[2]/div/div[3]/div/div[2]/div/select",
     )
-    dropdown.find_element(By.XPATH, "//option[. = 'Utilities']").click()
+    dropdown.find_element(By.XPATH, "//option[. = 'Quantum']").click()
     selenium.find_element(By.CSS_SELECTOR, ".widget-button:nth-child(1)").click()
     selenium.find_element(By.CSS_SELECTOR, ".widget-html-content > h1").click()
     time.sleep(5)
