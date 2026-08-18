@@ -152,8 +152,12 @@ def _storage_summary(profile) -> str | None:
 
 
 def _sanitize_broker_url(url) -> str:
-    """Strip userinfo (`user:pass@`) from a broker URL, e.g. an AMQP URL."""
-    return re.sub(r"://[^@/ ]+@", "://", url)
+    """Strip credentials (`user:pass@`) from a broker URL, e.g. an AMQP URL.
+
+    Matches through the last `@` so a password containing `@` isn't
+    partially leaked.
+    """
+    return re.sub(r"://[^/ ]+@", "://", url)
 
 
 def _daemon_status(client) -> tuple[str, str]:

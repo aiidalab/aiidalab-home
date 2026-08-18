@@ -80,6 +80,15 @@ def test_refresh_shows_error_on_exception(run_threads_synchronously):
     [
         ("amqp://guest:guest@localhost:5672", "amqp://localhost:5672"),
         ("amqp://localhost:5672", "amqp://localhost:5672"),
+        # An unescaped `@` inside the userinfo segment must still be fully
+        # stripped, not just up to the first `@`.
+        ("amqp://user:p@ssword@localhost:5672", "amqp://localhost:5672"),
+        # The credential-bearing URL may be embedded in surrounding text,
+        # as `str(broker)` produces for RabbitMQ.
+        (
+            "RabbitMQ v3.9 @ amqp://guest:guest@localhost:5672",
+            "RabbitMQ v3.9 @ amqp://localhost:5672",
+        ),
     ],
 )
 def test_sanitize_broker_url(url, expected):
