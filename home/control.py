@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import html
+import logging
 import re
 import threading
 from datetime import datetime
@@ -10,6 +13,8 @@ from aiida import get_profile, manage, orm
 from aiida.engine.daemon.client import DaemonException
 
 from home.themes import ThemeDefault as Theme
+
+logger = logging.getLogger(__name__)
 
 _STATE_COLORS = {
     "ok": Theme.COLORS.CHECK,
@@ -204,6 +209,7 @@ class StatusOverviewWidget(ControlSectionWidget):
         try:
             rows.append(self._status_row("ok", "config", manage.get_config().dirpath))
         except Exception as exc:
+            logger.exception("Status overview: config probe failed")
             rows.append(self._status_row("error", "config", str(exc)))
 
         profile = None
@@ -214,6 +220,7 @@ class StatusOverviewWidget(ControlSectionWidget):
             else:
                 rows.append(self._status_row("ok", "profile", profile.name))
         except Exception as exc:
+            logger.exception("Status overview: profile probe failed")
             rows.append(self._status_row("error", "profile", str(exc)))
 
         try:
@@ -241,12 +248,14 @@ class StatusOverviewWidget(ControlSectionWidget):
                     self._status_row("ok", "broker", sanitized, tooltip=sanitized)
                 )
         except Exception as exc:
+            logger.exception("Status overview: broker probe failed")
             rows.append(self._status_row("error", "broker", str(exc)))
 
         try:
             state, text = _daemon_status(self._daemon)
             rows.append(self._status_row(state, "daemon", text))
         except Exception as exc:
+            logger.exception("Status overview: daemon probe failed")
             rows.append(self._status_row("error", "daemon", str(exc)))
 
         self._status.value = (
