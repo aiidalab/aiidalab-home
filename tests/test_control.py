@@ -127,6 +127,13 @@ def test_daemon_status_running():
     assert "3 worker" in text
 
 
+def test_daemon_status_running_zero_workers():
+    client = SimpleNamespace(is_daemon_running=True, get_number_of_workers=lambda: 0)
+    state, text = _daemon_status(client)
+    assert state == "warning"
+    assert "0 worker" in text
+
+
 def test_daemon_status_not_running():
     client = SimpleNamespace(is_daemon_running=False, get_number_of_workers=None)
     state, text = _daemon_status(client)

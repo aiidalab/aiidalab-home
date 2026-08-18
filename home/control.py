@@ -169,6 +169,10 @@ def _daemon_status(client) -> tuple[str, str]:
     except DaemonException:
         # The daemon stopped between the check and the call.
         return "warning", "Daemon is not running"
+    if workers == 0:
+        # The supervisor process is up, but with no workers nothing
+        # picks jobs off the queue — indistinguishable from not running.
+        return "warning", "Daemon is running with 0 workers"
     return "ok", f"Daemon is running with {workers} worker(s)"
 
 
