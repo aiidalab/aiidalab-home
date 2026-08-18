@@ -210,9 +210,15 @@ class StatusOverviewWidget(ControlSectionWidget):
         )
 
     def _do_refresh(self):
-        rows = [
-            self._status_row("ok", "version", f"AiiDA v{aiida.__version__}"),
-        ]
+        rows = []
+
+        try:
+            rows.append(
+                self._status_row("ok", "version", f"AiiDA v{aiida.__version__}")
+            )
+        except Exception as exc:
+            logger.exception("Status overview: version probe failed")
+            rows.append(self._status_row("error", "version", str(exc)))
 
         try:
             rows.append(self._status_row("ok", "config", manage.get_config().dirpath))
