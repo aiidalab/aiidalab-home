@@ -6,6 +6,7 @@ from typing import cast
 import pytest
 from aiida.engine.daemon.client import DaemonException
 
+import home.control as control_module
 from home.control import (
     _STATE_COLORS,
     ControlSectionWidget,
@@ -165,6 +166,41 @@ def test_probe_daemon(aiida_profile):
     assert "not running" in row
 
 
+def test_probe_profile_matches_default(aiida_profile, monkeypatch):
+    widget = StatusOverviewWidget()
+    widget._profile = aiida_profile
+    monkeypatch.setattr(
+        control_module, "_current_default_profile_name", lambda: aiida_profile.name
+    )
+    row = widget._probe_profile()
+    assert _STATE_COLORS["ok"] in row
+
+
+def test_probe_profile_drifted_from_default(aiida_profile, monkeypatch):
+    widget = StatusOverviewWidget()
+    widget._profile = aiida_profile
+    monkeypatch.setattr(
+        control_module, "_current_default_profile_name", lambda: "some-other-profile"
+    )
+    row = widget._probe_profile()
+    assert _STATE_COLORS["warning"] in row
+    assert "some-other-profile" in row
+    assert "reload the page" in row
+
+
+def test_probe_profile_default_read_failure_falls_back_to_loaded(
+    aiida_profile, monkeypatch
+):
+    def _raise():
+        raise OSError("boom")
+
+    widget = StatusOverviewWidget()
+    widget._profile = aiida_profile
+    monkeypatch.setattr(control_module, "_current_default_profile_name", _raise)
+    row = widget._probe_profile()
+    assert _STATE_COLORS["ok"] in row
+
+
 def test_status_overview_do_refresh(aiida_profile, run_threads_synchronously):
     widget = StatusOverviewWidget()
     widget.refresh()
@@ -187,8 +223,6 @@ def test_status_overview_do_refresh(aiida_profile, run_threads_synchronously):
 def test_status_overview_no_broker(
     aiida_profile, run_threads_synchronously, monkeypatch
 ):
-    import home.control as control_module
-
     monkeypatch.setattr(control_module.manage.get_manager(), "get_broker", lambda: None)
     widget = StatusOverviewWidget()
     widget.refresh()

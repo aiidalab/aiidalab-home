@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import json
 import logging
 import re
 import threading
@@ -161,6 +162,17 @@ def _storage_summary(profile) -> str | None:
     return None
 
 
+def _current_default_profile_name() -> str | None:
+    """Read the on-disk config's default profile name directly.
+
+    Bypasses AiiDA's cached config object, which does not pick up a
+    default changed by another process (e.g. `verdi profile setdefault`
+    run in a terminal) for the lifetime of this kernel.
+    """
+    with open(manage.get_config().filepath) as handle:
+        return json.load(handle).get("default_profile")
+
+
 def _sanitize_broker_url(url) -> str:
     """Strip credentials (`user:pass@`) from a broker URL, e.g. an AMQP URL.
 
@@ -210,6 +222,20 @@ class StatusOverviewWidget(ControlSectionWidget):
         # profile is loaded; reset at the top of every `_do_refresh`.
         if self._profile is None:
             return self._status_row("error", "profile", "No profile loaded")
+
+        try:
+            default_name = _current_default_profile_name()
+        except Exception:
+            logger.exception("Status overview: could not read on-disk default profile")
+            default_name = None
+
+        if default_name is not None and default_name != self._profile.name:
+            return self._status_row(
+                "warning",
+                "profile",
+                f"{self._profile.name} "
+                f"(default is now {default_name} - reload the page to apply)",
+            )
         return self._status_row("ok", "profile", self._profile.name)
 
     def _probe_storage(self):
