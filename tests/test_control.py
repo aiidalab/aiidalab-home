@@ -1,6 +1,7 @@
 import re
 import threading
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from aiida.engine.daemon.client import DaemonException
@@ -9,6 +10,7 @@ from home.control import (
     _STATE_COLORS,
     ControlSectionWidget,
     StatusOverviewWidget,
+    _DaemonClient,
     _sanitize_broker_url,
     _storage_summary,
 )
@@ -132,23 +134,24 @@ def test_storage_summary_psql_dos_missing_key_returns_none():
 def test_probe_daemon(aiida_profile):
     widget = StatusOverviewWidget()
 
-    widget._daemon = SimpleNamespace(
+    def _fake_daemon(**kwargs):
+        return cast(_DaemonClient, SimpleNamespace(**kwargs))
+
+    widget._daemon = _fake_daemon(
         is_daemon_running=True, get_number_of_workers=lambda: 3
     )
     row = widget._probe_daemon()
     assert _STATE_COLORS["ok"] in row
     assert "3 worker" in row
 
-    widget._daemon = SimpleNamespace(
+    widget._daemon = _fake_daemon(
         is_daemon_running=True, get_number_of_workers=lambda: 0
     )
     row = widget._probe_daemon()
     assert _STATE_COLORS["warning"] in row
     assert "0 worker" in row
 
-    widget._daemon = SimpleNamespace(
-        is_daemon_running=False, get_number_of_workers=None
-    )
+    widget._daemon = _fake_daemon(is_daemon_running=False, get_number_of_workers=None)
     row = widget._probe_daemon()
     assert _STATE_COLORS["warning"] in row
     assert "not running" in row
@@ -156,9 +159,7 @@ def test_probe_daemon(aiida_profile):
     def _raise():
         raise DaemonException("stopped")
 
-    widget._daemon = SimpleNamespace(
-        is_daemon_running=True, get_number_of_workers=_raise
-    )
+    widget._daemon = _fake_daemon(is_daemon_running=True, get_number_of_workers=_raise)
     row = widget._probe_daemon()
     assert _STATE_COLORS["warning"] in row
     assert "not running" in row

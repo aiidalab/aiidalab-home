@@ -5,7 +5,7 @@ import logging
 import re
 import threading
 from datetime import datetime
-from typing import ClassVar
+from typing import ClassVar, Protocol
 
 import aiida
 import ipywidgets as ipw
@@ -15,6 +15,16 @@ from aiida.engine.daemon.client import DaemonException
 from home.themes import ThemeDefault as Theme
 
 logger = logging.getLogger(__name__)
+
+
+class _DaemonClient(Protocol):
+    """The subset of `DaemonClient` that `_probe_daemon` relies on."""
+
+    @property
+    def is_daemon_running(self) -> bool: ...
+
+    def get_number_of_workers(self) -> int: ...
+
 
 _STATE_COLORS = {
     "ok": Theme.COLORS.CHECK,
@@ -169,7 +179,7 @@ class StatusOverviewWidget(ControlSectionWidget):
     }
 
     def __init__(self):
-        self._daemon = manage.get_manager().get_daemon_client()
+        self._daemon: _DaemonClient = manage.get_manager().get_daemon_client()
         self._status = ipw.HTML()
         super().__init__([self._status])
 
