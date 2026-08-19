@@ -216,10 +216,10 @@ class StatusOverviewWidget(ControlSectionWidget):
             f"</tr>"
         )
 
-    def _probe_version(self):
+    def _get_aiida_version(self):
         return self._status_row(State.OK, "version", f"AiiDA v{aiida.__version__}")
 
-    def _probe_config(self):
+    def _get_config_dir(self):
         return self._status_row(State.OK, "config", manage.get_config().dirpath)
 
     def _probe_profile(self):
@@ -295,8 +295,8 @@ class StatusOverviewWidget(ControlSectionWidget):
             logger.exception("Status overview: profile probe failed")
             self._profile = None
         probes = (
-            ("version", self._probe_version),
-            ("config", self._probe_config),
+            ("version", self._get_aiida_version),
+            ("config", self._get_config_dir),
             ("profile", self._probe_profile),
             ("storage", self._probe_storage),
             ("broker", self._probe_broker),
