@@ -259,7 +259,11 @@ class StatusOverviewWidget(ControlSectionWidget):
             return self._status_row("error", label, str(exc))
 
     def _do_refresh(self):
-        self._profile = get_profile()
+        try:
+            self._profile = get_profile()
+        except Exception:
+            logger.exception("Status overview: profile probe failed")
+            self._profile = None
         probes = (
             ("version", self._probe_version),
             ("config", self._probe_config),
