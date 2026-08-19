@@ -8,8 +8,8 @@ from aiida.engine.daemon.client import DaemonException
 
 import home.control as control_module
 from home.control import (
-    _STATE_COLORS,
     ControlSectionWidget,
+    State,
     StatusOverviewWidget,
     _DaemonClient,
     _sanitize_broker_url,
@@ -142,19 +142,19 @@ def test_probe_daemon(aiida_profile):
         is_daemon_running=True, get_number_of_workers=lambda: 3
     )
     row = widget._probe_daemon()
-    assert _STATE_COLORS["ok"] in row
+    assert State.OK.color in row
     assert "3 worker" in row
 
     widget._daemon = _fake_daemon(
         is_daemon_running=True, get_number_of_workers=lambda: 0
     )
     row = widget._probe_daemon()
-    assert _STATE_COLORS["warning"] in row
+    assert State.WARNING.color in row
     assert "0 worker" in row
 
     widget._daemon = _fake_daemon(is_daemon_running=False, get_number_of_workers=None)
     row = widget._probe_daemon()
-    assert _STATE_COLORS["warning"] in row
+    assert State.WARNING.color in row
     assert "not running" in row
 
     def _raise():
@@ -162,7 +162,7 @@ def test_probe_daemon(aiida_profile):
 
     widget._daemon = _fake_daemon(is_daemon_running=True, get_number_of_workers=_raise)
     row = widget._probe_daemon()
-    assert _STATE_COLORS["warning"] in row
+    assert State.WARNING.color in row
     assert "not running" in row
 
 
@@ -173,7 +173,7 @@ def test_probe_profile_matches_default(aiida_profile, monkeypatch):
         control_module, "_current_default_profile_name", lambda: aiida_profile.name
     )
     row = widget._probe_profile()
-    assert _STATE_COLORS["ok"] in row
+    assert State.OK.color in row
 
 
 def test_probe_profile_drifted_from_default(aiida_profile, monkeypatch):
@@ -183,7 +183,7 @@ def test_probe_profile_drifted_from_default(aiida_profile, monkeypatch):
         control_module, "_current_default_profile_name", lambda: "some-other-profile"
     )
     row = widget._probe_profile()
-    assert _STATE_COLORS["warning"] in row
+    assert State.WARNING.color in row
     assert "reload the page" in row
 
 
@@ -197,7 +197,7 @@ def test_probe_profile_default_read_failure_falls_back_to_loaded(
     widget._profile = aiida_profile
     monkeypatch.setattr(control_module, "_current_default_profile_name", _raise)
     row = widget._probe_profile()
-    assert _STATE_COLORS["ok"] in row
+    assert State.OK.color in row
 
 
 def test_status_overview_do_refresh(aiida_profile, run_threads_synchronously):
@@ -216,7 +216,7 @@ def test_status_overview_do_refresh(aiida_profile, run_threads_synchronously):
         if any(f"<b>{label}</b>" in row for label in ("version", "config", "profile"))
     ]
     assert len(checked_rows) == 3
-    assert not any(_STATE_COLORS["error"] in row for row in checked_rows)
+    assert not any(State.ERROR.color in row for row in checked_rows)
 
 
 def test_status_overview_no_broker(

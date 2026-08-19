@@ -6,7 +6,8 @@ import logging
 import re
 import threading
 from datetime import datetime
-from typing import ClassVar, Protocol
+from enum import Enum
+from typing import Protocol
 
 import aiida
 import ipywidgets as ipw
@@ -27,15 +28,24 @@ class _DaemonClient(Protocol):
     def get_number_of_workers(self) -> int: ...
 
 
-_STATE_COLORS = {
-    "ok": Theme.COLORS.CHECK,
-    "warning": Theme.COLORS.AIIDALAB_ORANGE,
-    "error": Theme.COLORS.DANGER,
-}
+class State(str, Enum):
+    color: str
+    icon: str
+
+    def __new__(cls, value, color, icon):
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj.color = color
+        obj.icon = icon
+        return obj
+
+    OK = "ok", Theme.COLORS.CHECK, Theme.ICONS.CHECK
+    WARNING = "warning", Theme.COLORS.AIIDALAB_ORANGE, Theme.ICONS.WARNING
+    ERROR = "error", Theme.COLORS.DANGER, Theme.ICONS.TIMES_CIRCLE
 
 
-def _state_span(state, text) -> str:
-    return f"<span style='color:{_STATE_COLORS[state]}'>{html.escape(text)}</span>"
+def _state_span(state: State, text) -> str:
+    return f"<span style='color:{state.color}'>{html.escape(text)}</span>"
 
 
 class ControlSectionWidget(ipw.VBox):
@@ -80,13 +90,13 @@ class ControlSectionWidget(ipw.VBox):
         self.layout.padding = "8px 0 0 0"
 
     def show_success(self, text):
-        self.info.value = _state_span("ok", text)
+        self.info.value = _state_span(State.OK, text)
 
     def show_warning(self, text):
-        self.info.value = _state_span("warning", text)
+        self.info.value = _state_span(State.WARNING, text)
 
     def show_error(self, text):
-        self.info.value = _state_span("error", text)
+        self.info.value = _state_span(State.ERROR, text)
 
     def show_plain(self, text):
         self.info.value = html.escape(text)
@@ -184,11 +194,6 @@ def _sanitize_broker_url(url) -> str:
 
 class StatusOverviewWidget(ControlSectionWidget):
     description = "Health of the services behind AiiDA."
-    _ROW_ICONS: ClassVar[dict[str, str]] = {
-        "ok": Theme.ICONS.CHECK,
-        "warning": Theme.ICONS.WARNING,
-        "error": Theme.ICONS.TIMES_CIRCLE,
-    }
 
     def __init__(self):
         self._daemon: _DaemonClient = manage.get_manager().get_daemon_client()
@@ -196,10 +201,10 @@ class StatusOverviewWidget(ControlSectionWidget):
         super().__init__([self._status])
 
     @classmethod
-    def _status_row(cls, state, label, text, tooltip=None):
-        icon = cls._ROW_ICONS[state]
-        color = _STATE_COLORS[state]
-        text_color = "inherit" if state == "ok" else color
+    def _status_row(cls, state: State, label, text, tooltip=None):
+        icon = state.icon
+        color = state.color
+        text_color = "inherit" if state == State.OK else color
         title_attr = f" title='{html.escape(tooltip)}'" if tooltip else ""
         return (
             f"<tr>"
@@ -212,16 +217,16 @@ class StatusOverviewWidget(ControlSectionWidget):
         )
 
     def _probe_version(self):
-        return self._status_row("ok", "version", f"AiiDA v{aiida.__version__}")
+        return self._status_row(State.OK, "version", f"AiiDA v{aiida.__version__}")
 
     def _probe_config(self):
-        return self._status_row("ok", "config", manage.get_config().dirpath)
+        return self._status_row(State.OK, "config", manage.get_config().dirpath)
 
     def _probe_profile(self):
         # Stashed for `_probe_storage`, which needs to know whether a
         # profile is loaded; reset at the top of every `_do_refresh`.
         if self._profile is None:
-            return self._status_row("error", "profile", "No profile loaded")
+            return self._status_row(State.ERROR, "profile", "No profile loaded")
 
         try:
             default_name = _current_default_profile_name()
@@ -231,48 +236,48 @@ class StatusOverviewWidget(ControlSectionWidget):
 
         if default_name is not None and default_name != self._profile.name:
             return self._status_row(
-                "warning",
+                State.WARNING,
                 "profile",
                 "Change of profile detected - reload the page to apply",
             )
-        return self._status_row("ok", "profile", self._profile.name)
+        return self._status_row(State.OK, "profile", self._profile.name)
 
     def _probe_storage(self):
         if self._profile is None:
-            return self._status_row("error", "storage", "No profile loaded")
+            return self._status_row(State.ERROR, "storage", "No profile loaded")
         # The storage object is cached, so it does not re-verify the
         # connection; run a cheap query to actually probe the database.
         orm.QueryBuilder().append(orm.User).count()
         storage = manage.get_manager().get_profile_storage()
         storage_text = str(storage)
         summary = _storage_summary(self._profile) or storage_text
-        return self._status_row("ok", "storage", summary, tooltip=storage_text)
+        return self._status_row(State.OK, "storage", summary, tooltip=storage_text)
 
     def _probe_broker(self):
         broker = manage.get_manager().get_broker()
         if broker is None:
-            return self._status_row("warning", "broker", "No broker configured")
+            return self._status_row(State.WARNING, "broker", "No broker configured")
         sanitized = _sanitize_broker_url(str(broker))
-        return self._status_row("ok", "broker", sanitized, tooltip=sanitized)
+        return self._status_row(State.OK, "broker", sanitized, tooltip=sanitized)
 
     def _probe_daemon(self):
         """Fetch the daemon status and return a row for the status table."""
         client = self._daemon
         if not client.is_daemon_running:
-            return self._status_row("warning", "daemon", "Daemon is not running")
+            return self._status_row(State.WARNING, "daemon", "Daemon is not running")
         try:
             workers = client.get_number_of_workers()
         except DaemonException:
             # The daemon stopped between the check and the call.
-            return self._status_row("warning", "daemon", "Daemon is not running")
+            return self._status_row(State.WARNING, "daemon", "Daemon is not running")
         if workers == 0:
             # The supervisor process is up, but with no workers nothing
             # picks jobs off the queue — indistinguishable from not running.
             return self._status_row(
-                "warning", "daemon", "Daemon is running with 0 workers"
+                State.WARNING, "daemon", "Daemon is running with 0 workers"
             )
         return self._status_row(
-            "ok", "daemon", f"Daemon is running with {workers} worker(s)"
+            State.OK, "daemon", f"Daemon is running with {workers} worker(s)"
         )
 
     def _run_probe(self, label, probe):
@@ -281,7 +286,7 @@ class StatusOverviewWidget(ControlSectionWidget):
             return probe()
         except Exception as exc:
             logger.exception("Status overview: %s probe failed", label)
-            return self._status_row("error", label, str(exc))
+            return self._status_row(State.ERROR, label, str(exc))
 
     def _do_refresh(self):
         try:
