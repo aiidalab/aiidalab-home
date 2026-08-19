@@ -8,9 +8,9 @@ from aiida.engine.daemon.client import DaemonException
 
 import home.control as control_module
 from home.control import (
+    AiidaStatusOverviewWidget,
     ControlSectionWidget,
     State,
-    StatusOverviewWidget,
     _DaemonClient,
     _sanitize_broker_url,
     _storage_summary,
@@ -133,7 +133,7 @@ def test_storage_summary_psql_dos_missing_key_returns_none():
 
 
 def test_probe_daemon(aiida_profile):
-    widget = StatusOverviewWidget()
+    widget = AiidaStatusOverviewWidget()
 
     def _fake_daemon(**kwargs):
         return cast(_DaemonClient, SimpleNamespace(**kwargs))
@@ -167,7 +167,7 @@ def test_probe_daemon(aiida_profile):
 
 
 def test_probe_profile_matches_default(aiida_profile, monkeypatch):
-    widget = StatusOverviewWidget()
+    widget = AiidaStatusOverviewWidget()
     widget._profile = aiida_profile
     monkeypatch.setattr(
         control_module, "_current_default_profile_name", lambda: aiida_profile.name
@@ -177,7 +177,7 @@ def test_probe_profile_matches_default(aiida_profile, monkeypatch):
 
 
 def test_probe_profile_drifted_from_default(aiida_profile, monkeypatch):
-    widget = StatusOverviewWidget()
+    widget = AiidaStatusOverviewWidget()
     widget._profile = aiida_profile
     monkeypatch.setattr(
         control_module, "_current_default_profile_name", lambda: "some-other-profile"
@@ -193,7 +193,7 @@ def test_probe_profile_default_read_failure_falls_back_to_loaded(
     def _raise():
         raise OSError("boom")
 
-    widget = StatusOverviewWidget()
+    widget = AiidaStatusOverviewWidget()
     widget._profile = aiida_profile
     monkeypatch.setattr(control_module, "_current_default_profile_name", _raise)
     row = widget._probe_profile()
@@ -201,7 +201,7 @@ def test_probe_profile_default_read_failure_falls_back_to_loaded(
 
 
 def test_status_overview_do_refresh(aiida_profile, run_threads_synchronously):
-    widget = StatusOverviewWidget()
+    widget = AiidaStatusOverviewWidget()
     widget.refresh()
     table = widget._status.value
     assert aiida_profile.name in table
@@ -223,6 +223,6 @@ def test_status_overview_no_broker(
     aiida_profile, run_threads_synchronously, monkeypatch
 ):
     monkeypatch.setattr(control_module.manage.get_manager(), "get_broker", lambda: None)
-    widget = StatusOverviewWidget()
+    widget = AiidaStatusOverviewWidget()
     widget.refresh()
     assert "No broker configured" in widget._status.value

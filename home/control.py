@@ -192,7 +192,7 @@ def _sanitize_broker_url(url) -> str:
     return re.sub(r"://[^/ ]+@", "://", url)
 
 
-class StatusOverviewWidget(ControlSectionWidget):
+class AiidaStatusOverviewWidget(ControlSectionWidget):
     description = "Health of the services behind AiiDA."
 
     def __init__(self):
