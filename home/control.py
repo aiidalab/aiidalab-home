@@ -160,26 +160,6 @@ def _sanitize_broker_url(url) -> str:
     return re.sub(r"://[^/ ]+@", "://", url)
 
 
-def _daemon_status(client) -> tuple[str, str]:
-    """Lightweight (state, text) probe of the daemon: running + worker count.
-
-    Does not fetch full worker info (that belongs to the daemon control
-    section) — only whether the daemon is up and how many workers it has.
-    """
-    if not client.is_daemon_running:
-        return "warning", "Daemon is not running"
-    try:
-        workers = client.get_number_of_workers()
-    except DaemonException:
-        # The daemon stopped between the check and the call.
-        return "warning", "Daemon is not running"
-    if workers == 0:
-        # The supervisor process is up, but with no workers nothing
-        # picks jobs off the queue — indistinguishable from not running.
-        return "warning", "Daemon is running with 0 workers"
-    return "ok", f"Daemon is running with {workers} worker(s)"
-
-
 class StatusOverviewWidget(ControlSectionWidget):
     description = "Health of the services behind AiiDA."
     _ROW_ICONS: ClassVar[dict[str, str]] = {
@@ -241,8 +221,24 @@ class StatusOverviewWidget(ControlSectionWidget):
         return self._status_row("ok", "broker", sanitized, tooltip=sanitized)
 
     def _probe_daemon(self):
-        state, text = _daemon_status(self._daemon)
-        return self._status_row(state, "daemon", text)
+        """Fetch the daemon status and return a row for the status table."""
+        client = self._daemon
+        if not client.is_daemon_running:
+            return self._status_row("warning", "daemon", "Daemon is not running")
+        try:
+            workers = client.get_number_of_workers()
+        except DaemonException:
+            # The daemon stopped between the check and the call.
+            return self._status_row("warning", "daemon", "Daemon is not running")
+        if workers == 0:
+            # The supervisor process is up, but with no workers nothing
+            # picks jobs off the queue — indistinguishable from not running.
+            return self._status_row(
+                "warning", "daemon", "Daemon is running with 0 workers"
+            )
+        return self._status_row(
+            "ok", "daemon", f"Daemon is running with {workers} worker(s)"
+        )
 
     def _run_probe(self, label, probe):
         """Run `probe()` and return its row, or an error row if it raises."""

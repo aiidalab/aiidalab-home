@@ -9,7 +9,6 @@ from home.control import (
     _STATE_COLORS,
     ControlSectionWidget,
     StatusOverviewWidget,
-    _daemon_status,
     _sanitize_broker_url,
     _storage_summary,
 )
@@ -130,35 +129,39 @@ def test_storage_summary_psql_dos_missing_key_returns_none():
     assert _storage_summary(profile) is None
 
 
-def test_daemon_status_running():
-    client = SimpleNamespace(is_daemon_running=True, get_number_of_workers=lambda: 3)
-    state, text = _daemon_status(client)
-    assert state == "ok"
-    assert "3 worker" in text
+def test_probe_daemon(aiida_profile):
+    widget = StatusOverviewWidget()
 
+    widget._daemon = SimpleNamespace(
+        is_daemon_running=True, get_number_of_workers=lambda: 3
+    )
+    row = widget._probe_daemon()
+    assert _STATE_COLORS["ok"] in row
+    assert "3 worker" in row
 
-def test_daemon_status_running_zero_workers():
-    client = SimpleNamespace(is_daemon_running=True, get_number_of_workers=lambda: 0)
-    state, text = _daemon_status(client)
-    assert state == "warning"
-    assert "0 worker" in text
+    widget._daemon = SimpleNamespace(
+        is_daemon_running=True, get_number_of_workers=lambda: 0
+    )
+    row = widget._probe_daemon()
+    assert _STATE_COLORS["warning"] in row
+    assert "0 worker" in row
 
+    widget._daemon = SimpleNamespace(
+        is_daemon_running=False, get_number_of_workers=None
+    )
+    row = widget._probe_daemon()
+    assert _STATE_COLORS["warning"] in row
+    assert "not running" in row
 
-def test_daemon_status_not_running():
-    client = SimpleNamespace(is_daemon_running=False, get_number_of_workers=None)
-    state, text = _daemon_status(client)
-    assert state == "warning"
-    assert "not running" in text
-
-
-def test_daemon_status_daemon_exception_between_check_and_call():
     def _raise():
         raise DaemonException("stopped")
 
-    client = SimpleNamespace(is_daemon_running=True, get_number_of_workers=_raise)
-    state, text = _daemon_status(client)
-    assert state == "warning"
-    assert "not running" in text
+    widget._daemon = SimpleNamespace(
+        is_daemon_running=True, get_number_of_workers=_raise
+    )
+    row = widget._probe_daemon()
+    assert _STATE_COLORS["warning"] in row
+    assert "not running" in row
 
 
 def test_status_overview_do_refresh(aiida_profile, run_threads_synchronously):
