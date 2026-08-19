@@ -233,8 +233,7 @@ class StatusOverviewWidget(ControlSectionWidget):
             return self._status_row(
                 "warning",
                 "profile",
-                f"{self._profile.name} "
-                f"(default is now {default_name} - reload the page to apply)",
+                "Change of profile detected - reload the page to apply",
             )
         return self._status_row("ok", "profile", self._profile.name)
 

@@ -184,7 +184,6 @@ def test_probe_profile_drifted_from_default(aiida_profile, monkeypatch):
     )
     row = widget._probe_profile()
     assert _STATE_COLORS["warning"] in row
-    assert "some-other-profile" in row
     assert "reload the page" in row
 
 
