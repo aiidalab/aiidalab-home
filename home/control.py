@@ -473,7 +473,7 @@ class SystemResourcesWidget(ControlSectionWidget):
         try:
             load_1min, cpus = _cpu_status()
             fraction = _safe_fraction(load_1min, cpus)
-            text = f"load {load_1min:.2f} / {cpus:.0f} CPUs ({fraction:.0%})"
+            text = f"load {load_1min:.2f} / {cpus:.2f} CPUs ({fraction:.0%})"
             self._set_row(self._cpu_bar, self._cpu_label, fraction, text)
         except Exception as exc:
             self._set_row_error(self._cpu_bar, self._cpu_label, exc)
