@@ -352,6 +352,25 @@ def test_cpu_status_quota_max_falls_back_to_cpu_count(cgroup_dir, monkeypatch):
     assert effective_cpus == 4.0
 
 
+def test_cpu_status_no_cgroup_raises(cgroup_dir, monkeypatch):
+    # No cpu.max file at all: not running under cgroup v2, which shouldn't
+    # happen in AiiDAlab's Docker deployment - surface it as an error
+    # rather than silently reporting a host-wide CPU count as this
+    # container's own.
+    monkeypatch.setattr(control_module.os, "getloadavg", lambda: (0.5, 0.5, 0.5))
+
+    with pytest.raises(RuntimeError, match="cgroup v2"):
+        _cpu_status()
+
+
+def test_cpu_status_malformed_quota_raises(cgroup_dir, monkeypatch):
+    (cgroup_dir / "cpu.max").write_text("not-a-number 100000\n")
+    monkeypatch.setattr(control_module.os, "getloadavg", lambda: (0.5, 0.5, 0.5))
+
+    with pytest.raises(RuntimeError, match="cgroup v2"):
+        _cpu_status()
+
+
 def test_safe_fraction_zero_total_raises():
     with pytest.raises(ValueError, match="unavailable"):
         _safe_fraction(1, 0)

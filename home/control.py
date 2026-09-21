@@ -385,31 +385,26 @@ def _memory_status() -> tuple[int, int]:
 def _cpu_status() -> tuple[float, float]:
     """(load_1min, effective_cpus).
 
-    The 1-minute load average is host-wide even inside a container with a
-    CPU quota - there is no cgroup equivalent of "load average scoped to
-    this container". effective_cpus comes from cpu.max quota/period when
-    limited, else os.cpu_count(). The row label shows the raw load and CPU
-    count alongside the resulting fraction, so the user sees the inputs
-    behind the caveat.
+    load_1min is host-wide - no cgroup equivalent exists. effective_cpus
+    is the cpu.max quota/period when set, else os.cpu_count().
+
+    Raises if cpu.max is missing or malformed, which shouldn't happen in
+    AiiDAlab's Docker deployment.
     """
     load_1min = os.getloadavg()[0]
 
     try:
         quota_str, period_str = (_CGROUP_DIR / "cpu.max").read_text().split()
-    except OSError:
-        quota_str, period_str = "max", "100000"
+    except OSError as exc:
+        raise RuntimeError("cgroup v2 cpu.max unavailable") from exc
 
-    effective_cpus = None
-    if quota_str != "max":
-        try:
-            effective_cpus = int(quota_str) / int(period_str)
-        except (ValueError, ZeroDivisionError):
-            effective_cpus = None
+    if quota_str == "max":
+        return load_1min, float(os.cpu_count() or 1)
 
-    if effective_cpus is None:
-        effective_cpus = float(os.cpu_count() or 1)
-
-    return load_1min, effective_cpus
+    try:
+        return load_1min, int(quota_str) / int(period_str)
+    except (ValueError, ZeroDivisionError) as exc:
+        raise RuntimeError("cgroup v2 cpu.max unavailable") from exc
 
 
 def _safe_fraction(used, total) -> float:
