@@ -416,7 +416,7 @@ def _disk_status() -> tuple[int, int]:
 def _safe_fraction(used, total) -> float:
     """used / total, or raise if total is falsy (row is then unavailable)."""
     if not total:
-        raise ValueError("total size unavailable")
+        raise ValueError("value unavailable")
     return used / total
 
 
