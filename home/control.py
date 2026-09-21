@@ -402,12 +402,6 @@ def _cpu_status() -> tuple[float, float]:
     return load_1min, effective_cpus
 
 
-def _disk_status() -> tuple[int, int]:
-    """(used_bytes, total_bytes) for the filesystem hosting Path.home()."""
-    usage = shutil.disk_usage(Path.home())
-    return usage.used, usage.total
-
-
 def _safe_fraction(used, total) -> float:
     """used / total, or raise if total is falsy (row is then unavailable)."""
     if not total:
@@ -478,10 +472,10 @@ class SystemResourcesWidget(ControlSectionWidget):
             self._set_row_error(self._cpu_bar, self._cpu_label, exc)
 
         try:
-            used, total = _disk_status()
-            fraction = _safe_fraction(used, total)
+            usage = shutil.disk_usage(Path.home())
+            fraction = _safe_fraction(usage.used, usage.total)
             text = (
-                f"{_format_bytes(used)} / {_format_bytes(total)} "
+                f"{_format_bytes(usage.used)} / {_format_bytes(usage.total)} "
                 f"({fraction:.0%}) — {Path.home()}"
             )
             self._set_row(self._disk_bar, self._disk_label, fraction, text)
