@@ -14,7 +14,6 @@ from typing import ClassVar, Protocol
 
 import aiida
 import ipywidgets as ipw
-import psutil
 from aiida import get_profile, manage, orm
 from aiida.engine.daemon.client import DaemonException
 
@@ -339,37 +338,48 @@ def _format_bytes(n) -> str:
     return f"{value:.1f} TiB"
 
 
-def _memory_status() -> tuple[int, int, bool]:
-    """(used_bytes, total_bytes, limited).
+_MEMINFO_PATH = Path("/proc/meminfo")  # module constant so tests can monkeypatch
 
-    used = memory.current - inactive_file (docker stats convention; falls
-    back to memory.current if memory.stat is unreadable). total =
-    memory.max when limited, else psutil.virtual_memory().total (host
-    total). If even memory.current is unavailable (not in a cgroup v2
-    container), falls back entirely to psutil:
-    (vm.total - vm.available, vm.total, False).
+
+def _memory_status() -> tuple[int, int]:
+    """(used_bytes, total_bytes).
+
+    Limited per container: cgroup-scoped, memory.current - inactive_file
+    (docker stats convention) against memory.max.
+
+    Unlimited: host-wide instead, since nothing bounds this container but
+    the shared pool - MemTotal - MemAvailable against MemTotal, from
+    /proc/meminfo.
+
+    Raises if memory.current/memory.stat are missing or malformed, which
+    shouldn't happen in AiiDAlab's Docker deployment.
     """
     current = _read_cgroup_int("memory.current")
     if current is None:
-        vm = psutil.virtual_memory()
-        return vm.total - vm.available, vm.total, False
-
-    inactive_file = None
-    try:
-        for line in (_CGROUP_DIR / "memory.stat").read_text().splitlines():
-            key, _, value = line.partition(" ")
-            if key == "inactive_file":
-                inactive_file = int(value)
-                break
-    except (OSError, ValueError):
-        inactive_file = None
-
-    used = current - inactive_file if inactive_file is not None else current
+        raise RuntimeError("cgroup v2 memory accounting unavailable")
 
     limit = _read_cgroup_int("memory.max")
-    if limit is not None:
-        return used, limit, True
-    return used, psutil.virtual_memory().total, False
+    if limit is None:
+        # No per-container ceiling, so report the pool this container
+        # actually competes for rather than its own tiny slice of it.
+        meminfo = {}
+        for line in _MEMINFO_PATH.read_text().splitlines():
+            key, _, value = line.partition(":")
+            if value:
+                meminfo[key] = int(value.split()[0]) * 1024
+        total = meminfo["MemTotal"]
+        return total - meminfo["MemAvailable"], total
+
+    try:
+        stat = dict(
+            line.split()
+            for line in (_CGROUP_DIR / "memory.stat").read_text().splitlines()
+        )
+        used = current - int(stat["inactive_file"])
+    except (OSError, ValueError, KeyError) as exc:
+        raise RuntimeError("cgroup v2 memory.stat unavailable") from exc
+
+    return used, limit
 
 
 def _cpu_status() -> tuple[float, float]:
@@ -452,13 +462,9 @@ class SystemResourcesWidget(ControlSectionWidget):
 
     def _do_refresh(self):
         try:
-            used, total, limited = _memory_status()
+            used, total = _memory_status()
             fraction = _safe_fraction(used, total)
-            suffix = "" if limited else " — no container limit, showing host total"
-            text = (
-                f"{_format_bytes(used)} / {_format_bytes(total)} "
-                f"({fraction:.0%}){suffix}"
-            )
+            text = f"{_format_bytes(used)} / {_format_bytes(total)} ({fraction:.0%})"
             self._set_row(self._memory_bar, self._memory_label, fraction, text)
         except Exception as exc:
             self._set_row_error(self._memory_bar, self._memory_label, exc)

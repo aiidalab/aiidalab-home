@@ -256,6 +256,13 @@ def cgroup_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
+@pytest.fixture
+def meminfo_path(tmp_path, monkeypatch):
+    path = tmp_path / "meminfo"
+    monkeypatch.setattr(control_module, "_MEMINFO_PATH", path)
+    return path
+
+
 def test_read_cgroup_int_normal_value(cgroup_dir):
     (cgroup_dir / "memory.max").write_text("1073741824\n")
     assert _read_cgroup_int("memory.max") == 1073741824
@@ -282,40 +289,53 @@ def test_memory_status_limited_subtracts_inactive_file(cgroup_dir):
     )
     (cgroup_dir / "memory.max").write_text("4294967296")  # 4 GiB
 
-    used, total, limited = _memory_status()
+    used, total = _memory_status()
     assert used == 2147483648 - 536870912
     assert total == 4294967296
-    assert limited is True
 
 
-def test_memory_status_unlimited_falls_back_to_host_total(cgroup_dir, monkeypatch):
+def test_memory_status_unlimited_uses_host_wide_used_and_total(
+    cgroup_dir, meminfo_path
+):
     (cgroup_dir / "memory.current").write_text("2147483648")
-    (cgroup_dir / "memory.stat").write_text("inactive_file 0\n")
-    # No memory.max file: unlimited.
-    monkeypatch.setattr(
-        control_module.psutil,
-        "virtual_memory",
-        lambda: SimpleNamespace(total=8 * 1024**3, available=6 * 1024**3),
+    # No memory.max file: unlimited, so used/total come entirely from
+    # /proc/meminfo (host-wide) rather than this container's own current -
+    # a small container shouldn't look like it has all of MemTotal free
+    # when the rest of the host/VM has already claimed most of it.
+    meminfo_path.write_text(
+        "MemTotal:       8388608 kB\nMemAvailable:   1048576 kB\nMemFree:  524288 kB\n"
     )
 
-    used, total, limited = _memory_status()
-    assert used == 2147483648
+    used, total = _memory_status()
     assert total == 8 * 1024**3
-    assert limited is False
+    assert used == 8 * 1024**3 - 1 * 1024**3
 
 
-def test_memory_status_no_cgroup_falls_back_to_psutil(cgroup_dir, monkeypatch):
-    # No memory.current file at all: not running under cgroup v2.
-    monkeypatch.setattr(
-        control_module.psutil,
-        "virtual_memory",
-        lambda: SimpleNamespace(total=8 * 1024**3, available=6 * 1024**3),
-    )
+def test_memory_status_missing_memory_stat_raises(cgroup_dir):
+    (cgroup_dir / "memory.current").write_text("2147483648")
+    (cgroup_dir / "memory.max").write_text("4294967296")
+    # No memory.stat file: same "shouldn't happen in Docker" story as a
+    # missing memory.current - surface it rather than guessing "used".
 
-    used, total, limited = _memory_status()
-    assert used == 2 * 1024**3
-    assert total == 8 * 1024**3
-    assert limited is False
+    with pytest.raises(RuntimeError, match="memory.stat"):
+        _memory_status()
+
+
+def test_memory_status_memory_stat_missing_inactive_file_raises(cgroup_dir):
+    (cgroup_dir / "memory.current").write_text("2147483648")
+    (cgroup_dir / "memory.max").write_text("4294967296")
+    (cgroup_dir / "memory.stat").write_text("active_file 100\nother 5\n")
+
+    with pytest.raises(RuntimeError, match="memory.stat"):
+        _memory_status()
+
+
+def test_memory_status_no_cgroup_raises(cgroup_dir):
+    # No memory.current file at all: not running under cgroup v2, which
+    # shouldn't happen in AiiDAlab's Docker deployment - surface it as an
+    # error rather than silently reporting meaningless host-wide numbers.
+    with pytest.raises(RuntimeError, match="cgroup v2"):
+        _memory_status()
 
 
 def test_cpu_status_quota_present(cgroup_dir, monkeypatch):
