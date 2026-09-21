@@ -398,3 +398,49 @@ def test_safe_fraction_normal():
 )
 def test_system_resources_bar_style(fraction, expected_style):
     assert SystemResourcesWidget._bar_style(fraction) == expected_style
+
+
+@pytest.fixture
+def stub_resource_probes(monkeypatch):
+    monkeypatch.setattr(control_module, "_memory_status", lambda: (512, 1024))
+    monkeypatch.setattr(control_module, "_cpu_status", lambda: (1.0, 4.0))
+    monkeypatch.setattr(control_module, "_disk_status", lambda: (200, 1000))
+
+
+def test_system_resources_do_refresh_success(
+    run_threads_synchronously, stub_resource_probes
+):
+    widget = SystemResourcesWidget()
+    widget.refresh()
+
+    assert widget._memory_bar.value == pytest.approx(0.5)
+    assert widget._memory_bar.bar_style == "success"
+    assert "50%" in widget._memory_label.value
+
+    assert widget._cpu_bar.value == pytest.approx(0.25)
+    assert widget._cpu_bar.bar_style == "success"
+
+    assert widget._disk_bar.value == pytest.approx(0.2)
+    assert widget._disk_bar.bar_style == "success"
+    assert State.ERROR.color not in widget._disk_label.value
+
+
+def test_system_resources_do_refresh_partial_failure(
+    run_threads_synchronously, stub_resource_probes, monkeypatch
+):
+    def _raise():
+        raise RuntimeError("cgroup v2 memory accounting unavailable")
+
+    monkeypatch.setattr(control_module, "_memory_status", _raise)
+
+    widget = SystemResourcesWidget()
+    widget.refresh()
+
+    # Memory failed...
+    assert widget._memory_bar.value == 0
+    assert widget._memory_bar.bar_style == "danger"
+    assert "cgroup v2 memory accounting unavailable" in widget._memory_label.value
+
+    # ...but CPU and disk still updated independently.
+    assert widget._cpu_bar.bar_style == "success"
+    assert widget._disk_bar.bar_style == "success"
