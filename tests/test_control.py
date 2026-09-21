@@ -11,7 +11,13 @@ from home.control import (
     AiidaStatusOverviewWidget,
     ControlSectionWidget,
     State,
+    SystemResourcesWidget,
+    _cpu_status,
     _DaemonClient,
+    _format_bytes,
+    _memory_status,
+    _read_cgroup_int,
+    _safe_fraction,
     _sanitize_broker_url,
     _storage_summary,
 )
@@ -226,3 +232,135 @@ def test_status_overview_no_broker(
     widget = AiidaStatusOverviewWidget()
     widget.refresh()
     assert "No broker configured" in widget._status.value
+
+
+@pytest.mark.parametrize(
+    "n, expected",
+    [
+        (0, "0.0 B"),
+        (512, "512.0 B"),
+        (1023, "1023.0 B"),
+        (1024, "1.0 KiB"),
+        (3.4 * 1024**3, "3.4 GiB"),
+        (1024**4, "1.0 TiB"),
+        (5 * 1024**5, "5120.0 TiB"),  # PiB overflows into TiB, not a new unit
+    ],
+)
+def test_format_bytes(n, expected):
+    assert _format_bytes(n) == expected
+
+
+@pytest.fixture
+def cgroup_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(control_module, "_CGROUP_DIR", tmp_path)
+    return tmp_path
+
+
+def test_read_cgroup_int_normal_value(cgroup_dir):
+    (cgroup_dir / "memory.max").write_text("1073741824\n")
+    assert _read_cgroup_int("memory.max") == 1073741824
+
+
+def test_read_cgroup_int_max_is_unlimited(cgroup_dir):
+    (cgroup_dir / "memory.max").write_text("max\n")
+    assert _read_cgroup_int("memory.max") is None
+
+
+def test_read_cgroup_int_missing_file(cgroup_dir):
+    assert _read_cgroup_int("memory.max") is None
+
+
+def test_read_cgroup_int_garbage_content(cgroup_dir):
+    (cgroup_dir / "memory.max").write_text("not-a-number\n")
+    assert _read_cgroup_int("memory.max") is None
+
+
+def test_memory_status_limited_subtracts_inactive_file(cgroup_dir):
+    (cgroup_dir / "memory.current").write_text("2147483648")  # 2 GiB
+    (cgroup_dir / "memory.stat").write_text(
+        "active_file 100\ninactive_file 536870912\nother 5\n"  # 0.5 GiB
+    )
+    (cgroup_dir / "memory.max").write_text("4294967296")  # 4 GiB
+
+    used, total, limited = _memory_status()
+    assert used == 2147483648 - 536870912
+    assert total == 4294967296
+    assert limited is True
+
+
+def test_memory_status_unlimited_falls_back_to_host_total(cgroup_dir, monkeypatch):
+    (cgroup_dir / "memory.current").write_text("2147483648")
+    (cgroup_dir / "memory.stat").write_text("inactive_file 0\n")
+    # No memory.max file: unlimited.
+    monkeypatch.setattr(
+        control_module.psutil,
+        "virtual_memory",
+        lambda: SimpleNamespace(total=8 * 1024**3, available=6 * 1024**3),
+    )
+
+    used, total, limited = _memory_status()
+    assert used == 2147483648
+    assert total == 8 * 1024**3
+    assert limited is False
+
+
+def test_memory_status_no_cgroup_falls_back_to_psutil(cgroup_dir, monkeypatch):
+    # No memory.current file at all: not running under cgroup v2.
+    monkeypatch.setattr(
+        control_module.psutil,
+        "virtual_memory",
+        lambda: SimpleNamespace(total=8 * 1024**3, available=6 * 1024**3),
+    )
+
+    used, total, limited = _memory_status()
+    assert used == 2 * 1024**3
+    assert total == 8 * 1024**3
+    assert limited is False
+
+
+def test_cpu_status_quota_present(cgroup_dir, monkeypatch):
+    (cgroup_dir / "cpu.max").write_text("200000 100000\n")
+    monkeypatch.setattr(control_module.os, "getloadavg", lambda: (1.5, 1.0, 1.0))
+
+    load_1min, effective_cpus = _cpu_status()
+    assert load_1min == 1.5
+    assert effective_cpus == 2.0
+
+
+def test_cpu_status_quota_max_falls_back_to_cpu_count(cgroup_dir, monkeypatch):
+    (cgroup_dir / "cpu.max").write_text("max 100000\n")
+    monkeypatch.setattr(control_module.os, "getloadavg", lambda: (0.5, 0.5, 0.5))
+    monkeypatch.setattr(control_module.os, "cpu_count", lambda: 4)
+
+    load_1min, effective_cpus = _cpu_status()
+    assert load_1min == 0.5
+    assert effective_cpus == 4.0
+
+
+def test_safe_fraction_zero_total_raises():
+    with pytest.raises(ValueError, match="unavailable"):
+        _safe_fraction(1, 0)
+
+
+def test_safe_fraction_none_total_raises():
+    with pytest.raises(ValueError, match="unavailable"):
+        _safe_fraction(1, None)
+
+
+def test_safe_fraction_normal():
+    assert _safe_fraction(1, 4) == 0.25
+
+
+@pytest.mark.parametrize(
+    "fraction, expected_style",
+    [
+        (0.0, "success"),
+        (0.74, "success"),
+        (0.75, "warning"),
+        (0.89, "warning"),
+        (0.90, "danger"),
+        (1.0, "danger"),
+    ],
+)
+def test_system_resources_bar_style(fraction, expected_style):
+    assert SystemResourcesWidget._bar_style(fraction) == expected_style
