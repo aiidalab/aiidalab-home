@@ -263,21 +263,16 @@ def meminfo_path(tmp_path, monkeypatch):
     return path
 
 
-def test_read_cgroup_int_normal_value(cgroup_dir):
+def test_read_cgroup_int(cgroup_dir):
     (cgroup_dir / "memory.max").write_text("1073741824\n")
     assert _read_cgroup_int("memory.max") == 1073741824
 
-
-def test_read_cgroup_int_max_is_unlimited(cgroup_dir):
     (cgroup_dir / "memory.max").write_text("max\n")
     assert _read_cgroup_int("memory.max") is None
 
-
-def test_read_cgroup_int_missing_file(cgroup_dir):
+    (cgroup_dir / "memory.max").unlink()
     assert _read_cgroup_int("memory.max") is None
 
-
-def test_read_cgroup_int_garbage_content(cgroup_dir):
     (cgroup_dir / "memory.max").write_text("not-a-number\n")
     assert _read_cgroup_int("memory.max") is None
 
