@@ -364,8 +364,7 @@ def _memory_status() -> tuple[int, int]:
 
     limit = _read_cgroup_quantity("memory.max")
     if limit is None:
-        # No per-container ceiling, so report the pool this container
-        # actually competes for rather than its own tiny slice of it.
+        # No per-container limit: fall back to host-wide memory accounting.
         meminfo = {}
         for line in _MEMINFO_PATH.read_text().splitlines():
             key, _, value = line.partition(":")
