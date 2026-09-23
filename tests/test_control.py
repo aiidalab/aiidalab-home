@@ -16,7 +16,7 @@ from home.control import (
     _DaemonClient,
     _format_bytes,
     _memory_status,
-    _read_cgroup_int,
+    _read_cgroup_quantity,
     _safe_fraction,
     _sanitize_broker_url,
     _storage_summary,
@@ -263,18 +263,18 @@ def meminfo_path(tmp_path, monkeypatch):
     return path
 
 
-def test_read_cgroup_int(cgroup_dir):
+def test_read_cgroup_quantity(cgroup_dir):
     (cgroup_dir / "memory.max").write_text("1073741824\n")
-    assert _read_cgroup_int("memory.max") == 1073741824
+    assert _read_cgroup_quantity("memory.max") == 1073741824
 
     (cgroup_dir / "memory.max").write_text("max\n")
-    assert _read_cgroup_int("memory.max") is None
+    assert _read_cgroup_quantity("memory.max") is None
 
     (cgroup_dir / "memory.max").unlink()
-    assert _read_cgroup_int("memory.max") is None
+    assert _read_cgroup_quantity("memory.max") is None
 
     (cgroup_dir / "memory.max").write_text("not-a-number\n")
-    assert _read_cgroup_int("memory.max") is None
+    assert _read_cgroup_quantity("memory.max") is None
 
 
 def test_memory_status_limited_subtracts_inactive_file(cgroup_dir):

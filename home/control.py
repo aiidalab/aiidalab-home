@@ -314,7 +314,7 @@ class AiidaStatusOverviewWidget(ControlSectionWidget):
 _CGROUP_DIR = Path("/sys/fs/cgroup")  # module constant so tests can monkeypatch
 
 
-def _read_cgroup_int(filename) -> int | None:
+def _read_cgroup_quantity(filename) -> int | None:
     """Value of a cgroup v2 file, or None if missing or 'max' (i.e. unlimited)."""
     try:
         text = (_CGROUP_DIR / filename).read_text().strip()
@@ -354,11 +354,11 @@ def _memory_status() -> tuple[int, int]:
     Raises if memory.current/memory.stat are missing or malformed, which
     shouldn't happen in AiiDAlab's Docker deployment.
     """
-    current = _read_cgroup_int("memory.current")
+    current = _read_cgroup_quantity("memory.current")
     if current is None:
         raise RuntimeError("cgroup v2 memory accounting unavailable")
 
-    limit = _read_cgroup_int("memory.max")
+    limit = _read_cgroup_quantity("memory.max")
     if limit is None:
         # No per-container ceiling, so report the pool this container
         # actually competes for rather than its own tiny slice of it.
