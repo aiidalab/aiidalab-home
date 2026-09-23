@@ -342,12 +342,16 @@ _MEMINFO_PATH = Path("/proc/meminfo")  # module constant so tests can monkeypatc
 
 
 def _memory_status() -> tuple[int, int]:
-    """(used_bytes, total_bytes).
+    """The RAM memory usage of the container.
 
-    Limited per container: cgroup-scoped, memory.current - inactive_file
+    Returns a tuple of (used_bytes, total_bytes).
+
+    It distinguishes two cases:
+
+    - Limited per container: cgroup-scoped, memory.current - inactive_file
     (docker stats convention) against memory.max.
 
-    Unlimited: host-wide instead, since nothing bounds this container but
+    - Unlimited: host-wide instead, since nothing bounds this container but
     the shared pool - MemTotal - MemAvailable against MemTotal, from
     /proc/meminfo.
 
@@ -383,7 +387,9 @@ def _memory_status() -> tuple[int, int]:
 
 
 def _cpu_status() -> tuple[float, float]:
-    """(load_1min, effective_cpus).
+    """The CPU usage of the container.
+
+    Returns a tuple of (load_1min, effective_cpus).
 
     load_1min is host-wide - no cgroup equivalent exists. effective_cpus
     is the cpu.max quota/period when set, else os.cpu_count().
@@ -408,7 +414,9 @@ def _cpu_status() -> tuple[float, float]:
 
 
 def _disk_status() -> tuple[int, int]:
-    """(used_bytes, total_bytes) for the filesystem hosting Path.home()."""
+    """The disk usage of the filesystem hosting Path.home().
+
+    Returns a tuple of (used_bytes, total_bytes)."""
     usage = shutil.disk_usage(Path.home())
     return usage.used, usage.total
 
