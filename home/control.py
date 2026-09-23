@@ -3,11 +3,14 @@ from __future__ import annotations
 import html
 import json
 import logging
+import os
 import re
+import shutil
 import threading
 from datetime import datetime
 from enum import Enum
-from typing import Protocol
+from pathlib import Path
+from typing import ClassVar, Protocol
 
 import aiida
 import ipywidgets as ipw
@@ -308,11 +311,190 @@ class AiidaStatusOverviewWidget(ControlSectionWidget):
         )
 
 
+_CGROUP_DIR = Path("/sys/fs/cgroup")  # module constant so tests can monkeypatch
+
+
+def _read_cgroup_quantity(filename) -> int | None:
+    """Value of a cgroup v2 file, or None if missing or 'max' (i.e. unlimited)."""
+    try:
+        text = (_CGROUP_DIR / filename).read_text().strip()
+    except OSError:
+        return None
+    if text == "max":
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
+def _format_bytes(n) -> str:
+    """Human-readable binary size, e.g. '3.4 GiB'."""
+    value = float(n)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if value < 1024 or unit == "TiB":
+            return f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} TiB"
+
+
+_MEMINFO_PATH = Path("/proc/meminfo")  # module constant so tests can monkeypatch
+
+
+def _memory_status() -> tuple[int, int]:
+    """The RAM memory usage of the container.
+
+    Returns a tuple of (used_bytes, total_bytes).
+
+    It distinguishes two cases:
+
+    - Limited per container: cgroup-scoped, memory.current - inactive_file
+    (docker stats convention) against memory.max.
+
+    - Unlimited: host-wide instead, since nothing bounds this container but
+    the shared pool - MemTotal - MemAvailable against MemTotal, from
+    /proc/meminfo.
+
+    Raises if memory.current/memory.stat are missing or malformed, which
+    shouldn't happen in AiiDAlab's Docker deployment.
+    """
+    current = _read_cgroup_quantity("memory.current")
+    if current is None:
+        raise RuntimeError("cgroup v2 memory accounting unavailable")
+
+    limit = _read_cgroup_quantity("memory.max")
+    if limit is None:
+        # No per-container limit: fall back to host-wide memory accounting.
+        meminfo = {}
+        for line in _MEMINFO_PATH.read_text().splitlines():
+            key, _, value = line.partition(":")
+            if value:
+                meminfo[key] = int(value.split()[0]) * 1024
+        total = meminfo["MemTotal"]
+        return total - meminfo["MemAvailable"], total
+
+    try:
+        stat = dict(
+            line.split()
+            for line in (_CGROUP_DIR / "memory.stat").read_text().splitlines()
+        )
+        used = current - int(stat["inactive_file"])
+    except (OSError, ValueError, KeyError) as exc:
+        raise RuntimeError("cgroup v2 memory.stat unavailable") from exc
+
+    return used, limit
+
+
+def _cpu_status() -> tuple[float, float]:
+    """The CPU usage of the container.
+
+    Returns a tuple of (load_1min, effective_cpus).
+
+    load_1min is host-wide - no cgroup equivalent exists. effective_cpus
+    is the cpu.max quota/period when set, else os.cpu_count().
+
+    Raises if cpu.max is missing or malformed, which shouldn't happen in
+    AiiDAlab's Docker deployment.
+    """
+    load_1min = os.getloadavg()[0]
+
+    try:
+        quota_str, period_str = (_CGROUP_DIR / "cpu.max").read_text().split()
+    except OSError as exc:
+        raise RuntimeError("cgroup v2 cpu.max unavailable") from exc
+
+    if quota_str == "max":
+        return load_1min, float(os.cpu_count() or 1)
+
+    try:
+        return load_1min, int(quota_str) / int(period_str)
+    except (ValueError, ZeroDivisionError) as exc:
+        raise RuntimeError("cgroup v2 cpu.max unavailable") from exc
+
+
+def _disk_status() -> tuple[int, int]:
+    """The disk usage of the filesystem hosting Path.home().
+
+    Returns a tuple of (used_bytes, total_bytes)."""
+    usage = shutil.disk_usage(Path.home())
+    return usage.used, usage.total
+
+
+def _safe_fraction(used, total) -> float:
+    """used / total, or raise if total is falsy (row is then unavailable)."""
+    if not total:
+        raise ValueError("total value unavailable")
+    return used / total
+
+
 class SystemResourcesWidget(ControlSectionWidget):
     description = "Memory, CPU and disk usage of this container."
+    _THRESHOLDS: ClassVar[tuple] = ((0.75, "success"), (0.90, "warning"))
+    _LABEL_WIDTH = "90px"
+
+    def _bar_row(self, label):
+        bar = ipw.FloatProgress(min=0, max=1)
+        text = ipw.HTML()
+        row = ipw.HBox(
+            [
+                ipw.HTML(f"<b>{label}</b>", layout=ipw.Layout(width=self._LABEL_WIDTH)),
+                bar,
+                text,
+            ]
+        )
+        return bar, text, row
 
     def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+        self._memory_bar, self._memory_label, memory_row = self._bar_row("Memory")
+        self._cpu_bar, self._cpu_label, cpu_row = self._bar_row("CPU load")
+        self._disk_bar, self._disk_label, disk_row = self._bar_row("Disk")
+
+        super().__init__([memory_row, cpu_row, disk_row])
+
+    @classmethod
+    def _bar_style(cls, fraction):
+        for threshold, style in cls._THRESHOLDS:
+            if fraction < threshold:
+                return style
+        return "danger"
+
+    def _set_row(self, bar, label, fraction, text):
+        bar.value = max(0.0, min(1.0, fraction))
+        bar.bar_style = self._bar_style(bar.value)
+        label.value = text
+
+    def _set_row_error(self, bar, label, exc):
+        bar.value = 0
+        bar.bar_style = "danger"
+        label.value = _state_span(State.ERROR, str(exc))
+
+    def _do_refresh(self):
+        try:
+            used, total = _memory_status()
+            fraction = _safe_fraction(used, total)
+            text = f"{_format_bytes(used)} / {_format_bytes(total)} ({fraction:.0%})"
+            self._set_row(self._memory_bar, self._memory_label, fraction, text)
+        except Exception as exc:
+            self._set_row_error(self._memory_bar, self._memory_label, exc)
+
+        try:
+            load_1min, cpus = _cpu_status()
+            fraction = _safe_fraction(load_1min, cpus)
+            text = f"load {load_1min:.2f} / {cpus:.2f} CPUs ({fraction:.0%})"
+            self._set_row(self._cpu_bar, self._cpu_label, fraction, text)
+        except Exception as exc:
+            self._set_row_error(self._cpu_bar, self._cpu_label, exc)
+
+        try:
+            used, total = _disk_status()
+            fraction = _safe_fraction(used, total)
+            text = (
+                f"{_format_bytes(used)} / {_format_bytes(total)} "
+                f"({fraction:.0%}) — {Path.home()}"
+            )
+            self._set_row(self._disk_bar, self._disk_label, fraction, text)
+        except Exception as exc:
+            self._set_row_error(self._disk_bar, self._disk_label, exc)
 
 
 class StorageWidget(ControlSectionWidget):
