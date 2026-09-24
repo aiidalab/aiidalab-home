@@ -146,8 +146,11 @@ class AiidaLabAppStore(ipw.HBox):
         end = (page + 1) * self.items_per_page.value
         with self.output:
             for number, app_base in enumerate(self.apps_to_display[start:end]):
-                if app_base.name == "home":
-                    continue  # Disable management of home app through UI.
+                # Disable management of home app through UI.
+                # Remove aiidalab-widgets-base from the list,
+                # it is no longer installable as an App
+                if app_base.name == "home" or app_base.name.replace("_", "-") == "aiidalab-widgets-base":
+                    continue
 
                 if (
                     self.category_filter.value
