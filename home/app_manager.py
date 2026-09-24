@@ -94,7 +94,7 @@ class AppManagerWidget(ipw.VBox):
             Reasons for incompatibility:
             <ul>
             {% for spec in app.compatibility_info %}
-                <li>{{ spec }}:
+                <li>{{ app.name }} v{{ spec }}:
                     <ul>
                         {% for missing_req in app.compatibility_info[spec] %}
                         <li>missing: {{ missing_req }}</li>
