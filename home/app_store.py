@@ -149,7 +149,10 @@ class AiidaLabAppStore(ipw.HBox):
                 # Disable management of home app through UI.
                 # Remove aiidalab-widgets-base from the list,
                 # it is no longer installable as an App
-                if app_base.name == "home" or app_base.name.replace("_", "-") == "aiidalab-widgets-base":
+                if (
+                    app_base.name == "home"
+                    or app_base.name.replace("_", "-") == "aiidalab-widgets-base"
+                ):
                     continue
 
                 if (
