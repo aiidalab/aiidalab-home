@@ -26,9 +26,9 @@ class AiidaLabAppStore(ipw.HBox):
 
         # Apps per page.
         self.items_per_page = ipw.BoundedIntText(
-            value=10,
+            value=20,
             min=5,
-            max=40,
+            max=100,
             step=5,
             description="Apps per page:",
             disabled=False,
