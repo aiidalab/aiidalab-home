@@ -7,7 +7,6 @@ import os
 import re
 import sys
 import threading
-import time
 import traceback
 import uuid
 import warnings
@@ -431,7 +430,7 @@ class ProcessMonitor(tl.HasTraits):
         with self._monitor_thread_lock:
             self._monitor_thread_stop.clear()
             self._monitor_thread = threading.Thread(
-                target=self._monitor_process, args=(process_uuid,)
+                target=self._monitor_process, args=(process_uuid,), daemon=True
             )
             self._monitor_thread.start()
 
@@ -633,6 +632,8 @@ class ProcessListWidget(ipw.VBox):
 
     def __init__(self, path_to_root="../", **kwargs):
         self.path_to_root = path_to_root
+        self._autoupdate_thread = None
+        self._autoupdate_stop = threading.Event()
         self.table = ipw.HTML()
         self.output = ipw.HTML()
         update_button = ipw.Button(description="Update now")
@@ -728,13 +729,23 @@ class ProcessListWidget(ipw.VBox):
         return None
 
     def _follow(self, update_interval):
-        while True:
+        while not self._autoupdate_stop.wait(update_interval):
             self.update()
-            time.sleep(update_interval)
 
     def start_autoupdate(self, update_interval=10):
-        update_state = threading.Thread(target=self._follow, args=(update_interval,))
-        update_state.start()
+        if self._autoupdate_thread is not None and self._autoupdate_thread.is_alive():
+            return
+        self._autoupdate_stop.clear()
+        self._autoupdate_thread = threading.Thread(
+            target=self._follow, args=(update_interval,), daemon=True
+        )
+        self._autoupdate_thread.start()
+
+    def stop_autoupdate(self):
+        self._autoupdate_stop.set()
+        if self._autoupdate_thread is not None:
+            self._autoupdate_thread.join()
+            self._autoupdate_thread = None
 
 
 class RunningCalcJobOutputWidget(ipw.VBox):
