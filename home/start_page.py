@@ -1,6 +1,7 @@
 """Module to generate AiiDAlab home page."""
 
 import json
+import sys
 from glob import glob
 from os import path
 from pathlib import Path
@@ -13,6 +14,26 @@ from markdown import Markdown
 
 from home.utils import load_widget
 from home.widgets import AppStatusInfoWidget
+
+MIGRATION_WARNING = """## AiiDAlab environment migration
+
+🎉 Your AiiDAlab environment has been upgraded 🎉
+
+For any app marked with "App incompatible", please open its **Manage App** page and click **Reinstall**.
+
+### Note regarding the AiiDAlab Widgets app
+
+The **AiiDAlab Widgets** app (`aiidalab-widgets-base`) is no longer supported as an installed app.
+If you have it installed, please uninstall it from its **Manage App** page.
+"""
+
+
+def needs_migration_warning(apps_path=AIIDALAB_APPS, python_version=sys.version_info):
+    """Return whether the installed apps indicate a Python image migration."""
+    return python_version >= (3, 12) and any(
+        path.isdir(path.join(apps_path, name))
+        for name in ("aiidalab-widgets-base", "aiidalab_widgets_base")
+    )
 
 
 def create_app_widget_move_buttons(name):
@@ -85,6 +106,9 @@ class AiidaLabHome:
             content = warning_file.read_text()
             notification = self._create_notification(content)
             children.append(notification)
+
+        if needs_migration_warning():
+            children.append(self._create_notification(MIGRATION_WARNING))
 
         apps = self.load_apps()
 
