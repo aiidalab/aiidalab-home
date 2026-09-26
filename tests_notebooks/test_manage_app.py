@@ -7,3 +7,4 @@ def test_single_app(selenium_driver, final_screenshot):
     selenium.set_window_size(1000, 1100)
     selenium.find_element(By.XPATH, "//button[contains(.,'Uninstall')]")
     selenium.find_element(By.XPATH, "//button[contains(.,'Install')]")
+    selenium.find_element(By.XPATH, "//button[contains(.,'Reinstall')]")
