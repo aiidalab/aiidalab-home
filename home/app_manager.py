@@ -376,7 +376,7 @@ class AppManagerWidget(ipw.VBox):
                 can_switch and (detached or not latest_selected)
             ) or bool(not installed and available_versions)
             can_uninstall = installed
-            can_reinstall = installed
+            can_reinstall = installed and self.app.core_compatible is True
             try:
                 can_update = (
                     self.app.remote_update_status is AppStatus.UPDATE_AVAILABLE
