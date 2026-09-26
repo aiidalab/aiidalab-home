@@ -195,6 +195,9 @@ class AppManagerWidget(ipw.VBox):
         self.update_button = ipw.Button(description="Update", disabled=True)
         self.update_button.on_click(self._update_app)
 
+        self.reinstall_button = ipw.Button(description="Reinstall", disabled=True)
+        self.reinstall_button.on_click(self._reinstall_app)
+
         self.issue_indicator = ipw.HTML()
         self.blocked_ignore = ipw.Checkbox(description="Ignore")
         self.blocked_ignore.layout.visibility = "hidden"
@@ -256,6 +259,7 @@ class AppManagerWidget(ipw.VBox):
                     self.uninstall_button,
                     self.install_button,
                     self.update_button,
+                    self.reinstall_button,
                     self.spinner,
                 ]
             ),
@@ -372,6 +376,7 @@ class AppManagerWidget(ipw.VBox):
                 can_switch and (detached or not latest_selected)
             ) or bool(not installed and available_versions)
             can_uninstall = installed
+            can_reinstall = installed and self.app.core_compatible is True
             try:
                 can_update = (
                     self.app.remote_update_status is AppStatus.UPDATE_AVAILABLE
@@ -450,6 +455,10 @@ class AppManagerWidget(ipw.VBox):
                     if can_update
                     else ""
                 )
+
+            self.reinstall_button.disabled = busy or not can_reinstall
+            self.reinstall_button.button_style = "info" if can_reinstall else ""
+            self.reinstall_button.icon = "refresh" if can_reinstall else ""
 
             # Update the version_selector widget state.
             more_than_one_version = (
@@ -541,6 +550,16 @@ class AppManagerWidget(ipw.VBox):
             self._show_msg_failure(str(error))
         else:
             self._show_msg_success("Updated app.")
+            self.dependencies_log.value = ""
+
+    def _reinstall_app(self, _):
+        """Attempt to reinstall the app dependencies in place."""
+        try:
+            self.app.reinstall_app(stdout=self.dependencies_log)
+        except (AssertionError, RuntimeError, CalledProcessError) as error:
+            self._show_msg_failure(str(error))
+        else:
+            self._show_msg_success("Reinstalled app.")
             self.dependencies_log.value = ""
 
     def _uninstall_app(self, _):
