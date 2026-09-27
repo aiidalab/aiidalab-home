@@ -26,6 +26,7 @@ def test_process_list_autoupdate_thread_stops(monkeypatch):
         home_process.ProcessListWidget, "update", lambda _: refreshed.set()
     )
     widget = home_process.ProcessListWidget()
+    refreshed.clear()
     widget.start_autoupdate(update_interval=0.01)
     thread = widget._autoupdate_thread
     assert thread is not None
