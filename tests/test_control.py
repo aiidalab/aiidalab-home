@@ -1350,6 +1350,9 @@ def restore_config_file(aiida_profile):
 def test_profile_make_default_keeps_external_changes(
     aiida_profile, restore_config_file
 ):
+    config = load_config()
+    config.add_profile(Profile("other", aiida_profile.dictionary))
+    config.store()
     widget = ProfileControlWidget()
     widget._do_refresh()
 
@@ -1359,8 +1362,8 @@ def test_profile_make_default_keeps_external_changes(
     external.add_profile(Profile("external", aiida_profile.dictionary))
     external.store()
 
-    (row,) = widget._rows.children
-    assert "(in use)" in row.children[0].value
-    row.make_default_button.click()
+    _profile_rows(widget)["other"].make_default_button.click()
 
-    assert "external" in load_config().profile_names
+    config = load_config()
+    assert config.default_profile_name == "other"
+    assert "external" in config.profile_names
