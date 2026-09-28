@@ -1370,7 +1370,7 @@ class ProfileControlWidget(ControlSectionWidget):
         delete_storage = self._delete_storage.value
         self._dismiss_confirmation()
         self.info.value = (
-            f"Deleting profile {html.escape(name)}... "
+            f'Deleting profile "{html.escape(name)}"... '
             "<i class='fa fa-spinner fa-spin'></i>"
         )
         try:
@@ -1383,14 +1383,9 @@ class ProfileControlWidget(ControlSectionWidget):
             return
 
         message = f'Profile "{name}" deleted.'
-        if was_default:
-            # AiiDA picks the first remaining profile as the new default.
-            new_default = config.default_profile_name
-            message += (
-                f' "{new_default}" is now the default profile.'
-                if new_default
-                else " No profiles remain."
-            )
+        if was_default and config.profiles:
+            # AiiDA makes the first remaining profile the new default.
+            message += f' "{config.default_profile_name}" is now the default profile.'
         self.show_success(message)
         self._render(config)
 

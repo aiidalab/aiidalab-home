@@ -1196,8 +1196,9 @@ class _FakeConfig:
     def delete_profile(self, name, delete_storage=True):
         self.calls.append(("delete_profile", name, delete_storage))
         self.profiles = [p for p in self.profiles if p.name != name]
-        if name == self.default_profile_name:
-            self.default_profile_name = self.profiles[0].name if self.profiles else None
+        # Like AiiDA, keep the stale default when no profiles remain.
+        if name == self.default_profile_name and self.profiles:
+            self.default_profile_name = self.profiles[0].name
 
 
 @pytest.fixture
@@ -1283,6 +1284,25 @@ def test_profile_delete_with_data(profile_widget):
     widget._on_confirm_delete()
     assert config.calls == [("delete_profile", "other", True)]
     assert "now the default" not in widget.info.value
+
+
+def test_profile_delete_last_default(monkeypatch):
+    # The loaded profile was removed by another process, so the last
+    # profile, the default, can be deleted: no new default is claimed.
+    config = _FakeConfig(["main"], default="main")
+    monkeypatch.setattr(control_module, "load_config", lambda: config)
+    monkeypatch.setattr(
+        control_module, "get_profile", lambda: SimpleNamespace(name="gone")
+    )
+    widget = ProfileControlWidget()
+    widget._do_refresh()
+    _profile_rows(widget)["main"].delete_button.click()
+    widget._on_confirm_delete()
+
+    message = html.unescape(widget.info.value)
+    assert 'Profile "main" deleted.' in message
+    assert "now the default" not in message
+    assert not widget._rows.children
 
 
 def test_profile_delete_cancel(profile_widget):
