@@ -6,7 +6,9 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
+from aiida import orm
 from aiida.engine.daemon.client import DaemonException, DaemonNotRunningException
+from aiida.engine.processes import control as process_control
 from aiida.storage.log import STORAGE_LOGGER
 
 import home.control as control_module
@@ -14,6 +16,7 @@ from home.control import (
     AiidaStatusOverviewWidget,
     ControlSectionWidget,
     DaemonControlWidget,
+    ProcessControlWidget,
     State,
     StorageWidget,
     SystemResourcesWidget,
@@ -996,3 +999,176 @@ def test_daemon_do_refresh_real_client(aiida_profile, run_threads_synchronously)
     widget.refresh()
     assert "Daemon is not running" in widget._status.value
     assert widget.add_worker_button.disabled is True
+
+
+@pytest.fixture
+def process_widget(aiida_profile, run_threads_synchronously, monkeypatch):
+    """A ProcessControlWidget with a running fake daemon and a list update
+    that keeps stubbed rows."""
+    widget = ProcessControlWidget()
+    monkeypatch.setattr(widget, "_daemon", SimpleNamespace(is_daemon_running=True))
+    return widget
+
+
+def _show_rows(widget, *pks):
+    """Simulate a process list update displaying the given PKs."""
+    widget.process_list.current_rows = {
+        "headers": ["PK", "Process label", "Process State"],
+        "rows": [
+            {"PK": str(pk), "Process label": f"Job{pk}", "Process State": "Waiting"}
+            for pk in pks
+        ],
+    }
+    widget.process_list.updated += 1
+
+
+def test_process_options_follow_the_list(process_widget):
+    widget = process_widget
+    _show_rows(widget, 1, 2, 3)
+    assert widget._selection.options == (
+        ("1 | Job1 | Waiting", 1),
+        ("2 | Job2 | Waiting", 2),
+        ("3 | Job3 | Waiting", 3),
+    )
+
+    widget._selection.value = (1, 3)
+    _show_rows(widget, 3, 4)
+    # 1 is gone from the list; 3 stays selected.
+    assert widget._selection.value == (3,)
+
+
+def test_process_buttons_need_a_selection(process_widget):
+    widget = process_widget
+    _show_rows(widget, 1)
+    assert widget.pause_button.disabled is True
+    widget._selection.value = (1,)
+    assert widget.pause_button.disabled is False
+    assert widget.kill_button.disabled is False
+
+
+def test_process_kill_needs_confirmation(process_widget, monkeypatch):
+    widget = process_widget
+    killed = []
+    monkeypatch.setattr(
+        process_control, "kill_processes", lambda nodes, timeout: killed.append(1)
+    )
+    _show_rows(widget, 1, 2)
+    widget._selection.value = (1, 2)
+
+    widget.kill_button.click()
+    assert widget.kill_button.description == "Confirm kill (2)"
+    assert killed == []
+
+    # Changing the selection disarms.
+    widget._selection.value = (1,)
+    assert widget.kill_button.description == "Kill"
+    widget.kill_button.click()
+    assert killed == []
+
+    # So does a list update.
+    _show_rows(widget, 1, 2)
+    assert widget.kill_button.description == "Kill"
+
+
+def test_process_past_days_filter(process_widget):
+    # Regression test: a bidirectional link between the day count and
+    # `past_days` let "All days" overwrite the day count with -1.
+    widget = process_widget
+    process_list = widget.process_list
+    assert widget._all_days.value is True
+    assert process_list.past_days == -1
+    assert widget._past_days.disabled is True
+
+    widget._all_days.value = False
+    assert widget._past_days.value == 7
+    assert widget._past_days.disabled is False
+    assert process_list.past_days == 7
+
+    widget._past_days.value = 3
+    assert process_list.past_days == 3
+
+    widget._all_days.value = True
+    assert process_list.past_days == -1
+    assert widget._past_days.value == 3
+
+    widget._all_days.value = False
+    assert process_list.past_days == 3
+
+
+def test_process_state_filter(process_widget):
+    widget = process_widget
+    assert widget.process_list.process_states == ["running", "waiting"]
+    widget._state_filter.value = ("finished",)
+    assert widget.process_list.process_states == ["finished"]
+
+
+def test_process_action_refused_without_daemon(process_widget, monkeypatch):
+    widget = process_widget
+    paused = []
+    monkeypatch.setattr(
+        process_control, "pause_processes", lambda nodes, timeout: paused.append(1)
+    )
+    monkeypatch.setattr(widget, "_daemon", SimpleNamespace(is_daemon_running=False))
+    _show_rows(widget, 1)
+    widget._selection.value = (1,)
+
+    widget.pause_button.click()
+
+    assert paused == []
+    assert State.WARNING.color in widget._action_status.value
+    assert "Daemon tab" in widget._action_status.value
+
+
+def test_process_action_reports_outcomes(process_widget, monkeypatch):
+    widget = process_widget
+    node = orm.Int(1).store()
+    missing_pk = 999_999_999
+    received = []
+
+    def _pause(nodes, timeout):
+        received.append([n.pk for n in nodes])
+        process_control.LOGGER.report(f"Request to pause Process<{node.pk}> sent.")
+        process_control.LOGGER.error(f"Process<{node.pk}> is already terminated.")
+
+    monkeypatch.setattr(process_control, "pause_processes", _pause)
+    updates = []
+    monkeypatch.setattr(widget.process_list, "update", lambda: updates.append(1))
+    _show_rows(widget, node.pk, missing_pk)
+    widget._selection.value = (node.pk, missing_pk)
+
+    widget.pause_button.click()
+
+    assert received == [[node.pk]]
+    status = widget._action_status.value
+    assert "Pause requested for 1 process(es)" in status
+    assert f"REPORT: Request to pause Process&lt;{node.pk}&gt; sent." in status
+    assert f"ERROR: Process&lt;{node.pk}&gt; is already terminated." in status
+    assert f"PK {missing_pk}" in status
+    assert State.ERROR.color in status
+    # The handler is removed again, the buttons re-enabled, the list updated.
+    assert not any(
+        isinstance(h, _ListLogHandler) for h in process_control.LOGGER.handlers
+    )
+    assert widget._busy is False
+    assert widget.pause_button.disabled is False
+    assert updates == [1]
+
+
+def test_process_action_failure_is_shown(process_widget, monkeypatch):
+    widget = process_widget
+    node = orm.Int(1).store()
+
+    def _play(nodes, timeout):
+        raise RuntimeError("broker unreachable")
+
+    monkeypatch.setattr(process_control, "play_processes", _play)
+    monkeypatch.setattr(widget.process_list, "update", lambda: None)
+    _show_rows(widget, node.pk)
+    widget._selection.value = (node.pk,)
+
+    widget.play_button.click()
+
+    assert "Failed to play the process(es): broker unreachable" in (
+        widget._action_status.value
+    )
+    assert widget.play_button.disabled is False
