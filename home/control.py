@@ -21,6 +21,7 @@ from aiida import get_profile, manage, orm
 from aiida.common.exceptions import NotExistent
 from aiida.engine.daemon.client import DaemonException, DaemonNotRunningException
 from aiida.engine.processes import control as process_control
+from aiida.manage.configuration import load_config
 from aiida.storage.log import STORAGE_LOGGER
 from aiidalab.config import AIIDALAB_APPS
 from plumpy import ProcessState
@@ -1246,11 +1247,152 @@ class ProcessControlWidget(ControlSectionWidget):
         return report
 
 
+class ProfileRow(ipw.HBox):
+    """A profile's name with its "Make default" and "Delete" buttons."""
+
+    def __init__(self, name, is_default, is_loaded, on_make_default, on_delete):
+        label = html.escape(name)
+        if is_default:
+            label += (
+                f" <span style='background:{Theme.COLORS.CHECK};color:white;"
+                "padding:1px 8px;border-radius:9px;font-size:11px;'>default</span>"
+            )
+        if is_loaded:
+            label += f" <span style='color:{Theme.COLORS.GRAY}'>(in use)</span>"
+
+        self.make_default_button = ipw.Button(
+            description="Make default",
+            button_style="info",
+            icon="star",
+            disabled=is_default,
+            tooltip="Already the default profile" if is_default else "",
+        )
+        self.make_default_button.on_click(lambda _: on_make_default(name))
+        self.delete_button = ipw.Button(
+            description="Delete",
+            button_style="danger",
+            icon="trash",
+            disabled=is_loaded,
+            tooltip="In use by this page, so it cannot be deleted" if is_loaded else "",
+        )
+        self.delete_button.on_click(lambda _: on_delete(name))
+
+        super().__init__(
+            [
+                ipw.HTML(label, layout=ipw.Layout(width="220px")),
+                self.make_default_button,
+                self.delete_button,
+            ]
+        )
+
+
 class ProfileControlWidget(ControlSectionWidget):
     description = "Manage AiiDA profiles: default profile and deletion."
 
     def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+        self._delete_target = None
+        self._rows = ipw.VBox()
+
+        self._confirm_text = ipw.HTML()
+        self._delete_storage = ipw.Checkbox(
+            value=False,
+            description="Also delete all data of this profile "
+            "(database and file repository)",
+            indent=False,
+            layout=ipw.Layout(width="auto"),
+        )
+        confirm_button = ipw.Button(
+            description="Confirm delete", button_style="danger", icon="trash"
+        )
+        confirm_button.on_click(self._on_confirm_delete)
+        cancel_button = ipw.Button(description="Cancel", icon="times")
+        cancel_button.on_click(self._dismiss_confirmation)
+        self._confirm_box = ipw.VBox(
+            [
+                self._confirm_text,
+                self._delete_storage,
+                ipw.HBox([confirm_button, cancel_button]),
+            ],
+            layout=ipw.Layout(display="none"),
+        )
+
+        super().__init__([self._rows, self._confirm_box])
+
+    def _do_refresh(self):
+        # Always read the config from disk: AiiDA's cached config misses
+        # changes made by other processes, and storing it would drop them.
+        self._render(load_config())
+
+    def _render(self, config):
+        loaded_profile = get_profile()
+        loaded_name = loaded_profile.name if loaded_profile is not None else None
+        self._rows.children = [
+            ProfileRow(
+                profile.name,
+                is_default=profile.name == config.default_profile_name,
+                is_loaded=profile.name == loaded_name,
+                on_make_default=self._on_make_default,
+                on_delete=self._on_delete,
+            )
+            for profile in config.profiles
+        ]
+        # The profile a pending confirmation targets may be gone.
+        self._dismiss_confirmation()
+
+    def _on_make_default(self, name):
+        try:
+            config = load_config()
+            config.set_default_profile(name, overwrite=True)
+            config.store()
+        except Exception as exc:
+            self.show_error(f'Failed to make "{name}" the default profile: {exc}')
+            return
+        self.show_success(f'Profile "{name}" is now the default.')
+        self._render(config)
+
+    def _on_delete(self, name):
+        self._delete_target = name
+        self._delete_storage.value = False
+        self._confirm_text.value = (
+            f"You are about to delete profile <b>{html.escape(name)}</b>. "
+            "This cannot be undone."
+        )
+        self._confirm_box.layout.display = ""
+
+    def _dismiss_confirmation(self, _=None):
+        self._delete_target = None
+        self._confirm_box.layout.display = "none"
+
+    def _on_confirm_delete(self, _=None):
+        name = self._delete_target
+        if name is None:
+            return
+        delete_storage = self._delete_storage.value
+        self._dismiss_confirmation()
+        self.info.value = (
+            f"Deleting profile {html.escape(name)}... "
+            "<i class='fa fa-spinner fa-spin'></i>"
+        )
+        try:
+            config = load_config()
+            was_default = name == config.default_profile_name
+            # Pass delete_storage explicitly: AiiDA deletes the data by default.
+            config.delete_profile(name, delete_storage=delete_storage)
+        except Exception as exc:
+            self.show_error(f'Failed to delete profile "{name}": {exc}')
+            return
+
+        message = f'Profile "{name}" deleted.'
+        if was_default:
+            # AiiDA picks the first remaining profile as the new default.
+            new_default = config.default_profile_name
+            message += (
+                f' "{new_default}" is now the default profile.'
+                if new_default
+                else " No profiles remain."
+            )
+        self.show_success(message)
+        self._render(config)
 
 
 class DangerZoneWidget(ControlSectionWidget):
