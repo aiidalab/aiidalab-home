@@ -589,7 +589,10 @@ class StorageWidget(ControlSectionWidget):
         )
         self._full_checkbox = ipw.Checkbox(
             value=False,
-            description="Full maintenance (requires the daemon to be stopped)",
+            description=(
+                "Full maintenance (needs exclusive access: "
+                "stop the daemon and close other AiiDAlab apps)"
+            ),
             indent=False,
             layout=ipw.Layout(width="auto"),
         )
@@ -712,7 +715,7 @@ class StorageWidget(ControlSectionWidget):
             return _state_span(
                 State.WARNING,
                 "Full maintenance needs exclusive access to the profile. "
-                "Stop the daemon first (see the Daemon tab) and try again.",
+                "Stop the daemon first (Daemon tab) and close other AiiDAlab apps.",
             )
 
         profile = get_profile()
