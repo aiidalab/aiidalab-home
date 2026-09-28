@@ -1395,8 +1395,148 @@ class ProfileControlWidget(ControlSectionWidget):
         self._render(config)
 
 
+# The container's entrypoint (aiidalab-docker-stack,
+# before-notebook.d/50_factory-reset.sh) reads this file on start, performs
+# the reset mode it contains and removes it. A module constant so tests can
+# monkeypatch it: the real file erases data on the next restart.
+_FACTORY_RESET_FILE = Path.home() / "AIIDALAB_FACTORY_RESET"
+
+# The reset modes of that script: (label, details).
+_RESET_MODES = {
+    "1": (
+        "Reset installed apps and local software",
+        "Removes ~/apps and ~/.local. AiiDA data and profiles survive.",
+    ),
+    "2": (
+        "Full factory reset — erase everything",
+        (
+            "Erases EVERYTHING in the home directory, including all AiiDA "
+            "data, profiles and files."
+        ),
+    ),
+}
+
+_FACTORY_RESET_CONFIRM_PHRASE = "factory-reset"
+
+
 class DangerZoneWidget(ControlSectionWidget):
     description = "Irreversible actions that can lead to data loss."
 
     def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+        self._env_warning = ipw.HTML()
+
+        self._mode = ipw.RadioButtons(
+            options=[(label, mode) for mode, (label, _) in _RESET_MODES.items()],
+            value="1",
+            layout=ipw.Layout(width="auto"),
+        )
+        self._mode_details = ipw.HTML()
+        self._mode.observe(self._show_mode_details, names="value")
+        self._show_mode_details()
+        self._confirm_text = ipw.Text(
+            placeholder=f"Type {_FACTORY_RESET_CONFIRM_PHRASE} to enable the button"
+        )
+        self._confirm_text.observe(self._on_confirm_text_change, names="value")
+        self._schedule_button = ipw.Button(
+            description="Schedule factory reset",
+            button_style="danger",
+            icon="exclamation-triangle",
+            disabled=True,
+        )
+        self._schedule_button.on_click(self._on_schedule)
+        self._schedule_box = ipw.VBox(
+            [
+                ipw.HTML(
+                    "A factory reset is performed by the AiiDAlab container on "
+                    "its <b>next restart</b>. Choose what to reset:"
+                ),
+                self._mode,
+                self._mode_details,
+                self._confirm_text,
+                self._schedule_button,
+            ]
+        )
+
+        self._scheduled_alert = ipw.HTML()
+        cancel_button = ipw.Button(description="Cancel scheduled reset", icon="undo")
+        cancel_button.on_click(self._on_cancel)
+        self._scheduled_box = ipw.VBox(
+            [self._scheduled_alert, cancel_button],
+            layout=ipw.Layout(display="none"),
+        )
+
+        super().__init__([self._env_warning, self._schedule_box, self._scheduled_box])
+        self.layout.border = f"1px solid {Theme.COLORS.DANGER}"
+        self.layout.padding = "12px"
+
+    def _show_mode_details(self, _=None):
+        _, details = _RESET_MODES[self._mode.value]
+        self._mode_details.value = html.escape(details)
+
+    def _on_confirm_text_change(self, change):
+        self._schedule_button.disabled = (
+            change["new"].strip() != _FACTORY_RESET_CONFIRM_PHRASE
+        )
+
+    def _on_schedule(self, _=None):
+        mode = self._mode.value
+        try:
+            _FACTORY_RESET_FILE.write_text(mode)
+            # Read it back: a reset the container won't see is worse than an
+            # error, e.g. on a home directory mounted with surprising semantics.
+            if _FACTORY_RESET_FILE.read_text() != mode:
+                raise RuntimeError("could not verify the content of the flag file")
+        except Exception as exc:
+            self.show_error(f"Failed to schedule the factory reset: {exc}")
+        else:
+            self.info.value = ""
+            self._confirm_text.value = ""
+        # Show whatever is on disk now, including a half-written flag file.
+        self._do_refresh()
+
+    def _on_cancel(self, _=None):
+        try:
+            _FACTORY_RESET_FILE.unlink(missing_ok=True)
+        except Exception as exc:
+            self.show_error(f"Failed to cancel the scheduled reset: {exc}")
+        else:
+            self.info.value = ""
+        self._do_refresh()
+
+    def _do_refresh(self):
+        # The container script lets a non-empty variable override the flag
+        # file, even "0" (which then cancels the reset scheduled here).
+        env_mode = os.environ.get("AIIDALAB_FACTORY_RESET", "")
+        self._env_warning.value = (
+            _state_span(
+                State.WARNING,
+                "The AIIDALAB_FACTORY_RESET environment variable of this "
+                f"container is set to '{env_mode}', which takes precedence "
+                "over a reset scheduled here.",
+            )
+            if env_mode
+            else ""
+        )
+
+        scheduled = _FACTORY_RESET_FILE.exists()
+        if scheduled:
+            self._scheduled_alert.value = self._scheduled_message()
+        self._schedule_box.layout.display = "none" if scheduled else ""
+        self._scheduled_box.layout.display = "" if scheduled else "none"
+
+    @staticmethod
+    def _scheduled_message():
+        try:
+            mode = _FACTORY_RESET_FILE.read_text().strip()
+        except OSError as exc:
+            what = f"the flag file could not be read: {exc}"
+        else:
+            label, details = _RESET_MODES.get(mode, (f"unknown mode '{mode}'", ""))
+            what = f"{label}. {details}" if details else label
+        return (
+            "<div class='alert alert-warning' role='alert'>"
+            f"A factory reset is scheduled: <b>{html.escape(what)}</b><br>"
+            "It is performed the next time this container is restarted (e.g. "
+            "with <code>aiidalab-launch restart</code>). Until then, it can be "
+            "cancelled.</div>"
+        )
