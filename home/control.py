@@ -1433,9 +1433,7 @@ class DangerZoneWidget(ControlSectionWidget):
         self._mode_details = ipw.HTML()
         self._mode.observe(self._show_mode_details, names="value")
         self._show_mode_details()
-        self._confirm_text = ipw.Text(
-            placeholder=f"Type {_FACTORY_RESET_CONFIRM_PHRASE} to enable the button"
-        )
+        self._confirm_text = ipw.Text()
         self._confirm_text.observe(self._on_confirm_text_change, names="value")
         self._schedule_button = ipw.Button(
             description="Schedule factory reset",
@@ -1452,6 +1450,9 @@ class DangerZoneWidget(ControlSectionWidget):
                 ),
                 self._mode,
                 self._mode_details,
+                ipw.HTML(
+                    f"To confirm, type <code>{_FACTORY_RESET_CONFIRM_PHRASE}</code>:"
+                ),
                 self._confirm_text,
                 self._schedule_button,
             ]
