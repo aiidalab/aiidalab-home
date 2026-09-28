@@ -456,9 +456,9 @@ def test_system_resources_do_refresh_partial_failure(
 def test_repository_path_psql_dos():
     profile = SimpleNamespace(
         storage_backend="core.psql_dos",
-        storage_config={"repository_uri": "file:///home/user/.aiida/repository"},
+        storage_config={"repository_uri": "file:///home/user/my%20aiida/repository"},
     )
-    assert str(_repository_path(profile)) == "/home/user/.aiida/repository"
+    assert str(_repository_path(profile)) == "/home/user/my aiida/repository"
 
 
 def test_repository_path_sqlite_dos():

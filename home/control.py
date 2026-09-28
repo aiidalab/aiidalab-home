@@ -12,6 +12,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Protocol
+from urllib.parse import unquote, urlparse
 
 import aiida
 import ipywidgets as ipw
@@ -508,7 +509,9 @@ def _repository_path(profile) -> Path:
     """
     backend = profile.storage_backend
     if backend == "core.psql_dos":
-        return Path(profile.storage_config["repository_uri"].removeprefix("file://"))
+        # Written by AiiDA with Path.as_uri(), i.e. percent-encoded.
+        uri = profile.storage_config["repository_uri"]
+        return Path(unquote(urlparse(uri).path))
     if backend == "core.sqlite_dos":
         return Path(profile.storage_config["filepath"])
     raise ValueError(f"not available for backend {backend}")
