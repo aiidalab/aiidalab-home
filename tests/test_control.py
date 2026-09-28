@@ -1247,7 +1247,10 @@ def test_profile_make_default(profile_widget):
     _profile_rows(widget)["other"].make_default_button.click()
 
     assert config.calls == [("set_default_profile", "other", True), ("store",)]
-    assert 'Profile "other" is now the default.' in html.unescape(widget.info.value)
+    assert (
+        'Profile "other" is now the default. Reload the page to use it.'
+        in html.unescape(widget.info.value)
+    )
     rows = _profile_rows(widget)
     assert "default" in rows["other"].children[0].value
     assert "default" not in rows["main"].children[0].value

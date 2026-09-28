@@ -1347,7 +1347,9 @@ class ProfileControlWidget(ControlSectionWidget):
         except Exception as exc:
             self.show_error(f'Failed to make "{name}" the default profile: {exc}')
             return
-        self.show_success(f'Profile "{name}" is now the default.')
+        self.show_success(
+            f'Profile "{name}" is now the default. Reload the page to use it.'
+        )
         self._render(config)
 
     def _on_delete(self, name):
