@@ -1003,8 +1003,7 @@ def test_daemon_do_refresh_real_client(aiida_profile, run_threads_synchronously)
 
 @pytest.fixture
 def process_widget(aiida_profile, run_threads_synchronously, monkeypatch):
-    """A ProcessControlWidget with a running fake daemon and a list update
-    that keeps stubbed rows."""
+    """A ProcessControlWidget with a fake, running daemon."""
     widget = ProcessControlWidget()
     monkeypatch.setattr(widget, "_daemon", SimpleNamespace(is_daemon_running=True))
     return widget
@@ -1050,23 +1049,40 @@ def test_process_kill_needs_confirmation(process_widget, monkeypatch):
     widget = process_widget
     killed = []
     monkeypatch.setattr(
-        process_control, "kill_processes", lambda nodes, timeout: killed.append(1)
+        process_control,
+        "kill_processes",
+        lambda nodes, timeout: killed.append([node.pk for node in nodes]),
     )
-    _show_rows(widget, 1, 2)
-    widget._selection.value = (1, 2)
+    monkeypatch.setattr(process_control, "pause_processes", lambda nodes, timeout: None)
+    # Keep the stubbed rows: a real update would disarm the kill by itself.
+    monkeypatch.setattr(widget.process_list, "update", lambda: None)
+    first, second = orm.Int(1).store(), orm.Int(2).store()
+    _show_rows(widget, first.pk, second.pk)
+    widget._selection.value = (first.pk, second.pk)
 
     widget.kill_button.click()
     assert widget.kill_button.description == "Confirm kill (2)"
     assert killed == []
 
     # Changing the selection disarms.
-    widget._selection.value = (1,)
+    widget._selection.value = (first.pk,)
     assert widget.kill_button.description == "Kill"
     widget.kill_button.click()
     assert killed == []
 
     # So does a list update.
-    _show_rows(widget, 1, 2)
+    _show_rows(widget, first.pk, second.pk)
+    assert widget.kill_button.description == "Kill"
+
+    # So does pausing.
+    widget.kill_button.click()
+    widget.pause_button.click()
+    assert widget.kill_button.description == "Kill"
+
+    # A confirmed kill is sent, and the button is reset.
+    widget.kill_button.click()
+    widget.kill_button.click()
+    assert killed == [[first.pk]]
     assert widget.kill_button.description == "Kill"
 
 
