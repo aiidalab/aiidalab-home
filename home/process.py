@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import inspect
 import os
 import re
@@ -29,6 +30,7 @@ from IPython.display import HTML, Javascript, clear_output, display
 from jinja2 import Template
 
 from home.node_preview import render_node_preview
+from home.themes import ThemeDefault as Theme
 
 
 class CantRegisterCallbackError(Exception):
@@ -70,6 +72,13 @@ PROCESS_TABLE_TEMPLATE = Template(
     </table>
     """
 )
+
+# Header labels that `CalculationQueryBuilder.get_projected` produces for the
+# projections in `ProcessListWidget._query_rows`. Named so that consumers of
+# `ProcessListWidget.current_rows` (e.g. `home.control`) don't hardcode them.
+HEADER_PK = "PK"
+HEADER_PROCESS_LABEL = "Process label"
+HEADER_STATE = "Process State"
 
 
 def _stringify_process_cell(value):
@@ -629,6 +638,8 @@ class ProcessListWidget(ipw.VBox):
     process_states = tl.List()
     process_label = tl.Unicode(allow_none=True)
     description_contains = tl.Unicode(allow_none=True)
+    # Incremented after every successful update, so embedders can react to it.
+    updated = tl.Int(0)
 
     def __init__(self, path_to_root="../", **kwargs):
         self.path_to_root = path_to_root
@@ -636,6 +647,8 @@ class ProcessListWidget(ipw.VBox):
         self._autoupdate_stop = threading.Event()
         self.table = ipw.HTML()
         self.output = ipw.HTML()
+        # The displayed rows as plain values, without the HTML links.
+        self.current_rows = {"headers": [], "rows": []}
         update_button = ipw.Button(description="Update now")
         update_button.on_click(self.update)
         super().__init__(
@@ -645,6 +658,24 @@ class ProcessListWidget(ipw.VBox):
 
     def update(self, _=None):
         """Perform the query."""
+        try:
+            headers, rows = self._query_rows()
+        except Exception as exc:
+            self.output.value = (
+                f"<span style='color:{Theme.COLORS.DANGER}'>"
+                f"Failed to update process list: {html.escape(str(exc))}</span>"
+            )
+            return
+
+        self.current_rows = {"headers": headers, "rows": rows}
+        self.output.value = f"{len(rows)} processes shown"
+
+        # Add HTML links.
+        rows = _add_process_links(rows, self.path_to_root)
+        self.table.value = _render_process_table(headers, rows)
+        self.updated += 1
+
+    def _query_rows(self):
         builder = CalculationQueryBuilder()
         filters = builder.get_filters(
             all_entries=False,
@@ -686,13 +717,7 @@ class ProcessListWidget(ipw.VBox):
         headers, rows = _normalize_process_rows(projected)
 
         # Keep only process that contain the requested string in the description.
-        rows = _filter_process_rows(rows, self.description_contains)
-
-        self.output.value = f"{len(rows)} processes shown"
-
-        # Add HTML links.
-        rows = _add_process_links(rows, self.path_to_root)
-        self.table.value = _render_process_table(headers, rows)
+        return headers, _filter_process_rows(rows, self.description_contains)
 
     @tl.validate("incoming_node")
     def _validate_incoming_node(self, provided):

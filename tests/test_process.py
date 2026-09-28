@@ -181,3 +181,46 @@ def test_process_list_widget_renders_empty_results(multiply_add_completed_workch
         f"home/process.ipynb?id={multiply_add_completed_workchain.pk}"
         not in widget.table.value
     )
+
+
+def test_process_list_widget_exposes_plain_rows(multiply_add_completed_workchain):
+    widget = home_process.ProcessListWidget()
+    updated_before = widget.updated
+    widget.update()
+    assert widget.updated == updated_before + 1
+
+    # The named header constants match what CalculationQueryBuilder emits.
+    headers = widget.current_rows["headers"]
+    for header in (
+        home_process.HEADER_PK,
+        home_process.HEADER_PROCESS_LABEL,
+        home_process.HEADER_STATE,
+    ):
+        assert header in headers
+
+    (row,) = (
+        row
+        for row in widget.current_rows["rows"]
+        if row[home_process.HEADER_PK] == str(multiply_add_completed_workchain.pk)
+    )
+    assert row[home_process.HEADER_PROCESS_LABEL] == "MultiplyAddWorkChain"
+    assert "Finished" in row[home_process.HEADER_STATE]
+
+
+def test_process_list_widget_shows_query_errors(monkeypatch):
+    widget = home_process.ProcessListWidget()
+    updated_before = widget.updated
+    rows_before = widget.current_rows
+
+    class _FailingBuilder:
+        def __init__(self):
+            raise RuntimeError("database <down>")
+
+    monkeypatch.setattr(home_process, "CalculationQueryBuilder", _FailingBuilder)
+    widget.update()
+
+    assert "Failed to update process list: database &lt;down&gt;" in (
+        widget.output.value
+    )
+    assert widget.updated == updated_before
+    assert widget.current_rows is rows_before
