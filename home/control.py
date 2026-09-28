@@ -1067,6 +1067,7 @@ class ProcessControlWidget(ControlSectionWidget):
         self._state_filter = ipw.SelectMultiple(
             options=[state.value for state in ProcessState],
             value=("running", "waiting"),
+            rows=len(ProcessState),
             description="Process state:",
             style={"description_width": "initial"},
         )
@@ -1138,11 +1139,8 @@ class ProcessControlWidget(ControlSectionWidget):
         previous_selection = set(self._selection.value)
         options = []
         for row in self.process_list.current_rows["rows"]:
-            try:
-                pk = int(row[HEADER_PK])
-            except (KeyError, ValueError):
-                continue
-            label = f"{pk} | {row.get(HEADER_PROCESS_LABEL, '')} | {row.get(HEADER_STATE, '')}"
+            pk = int(row[HEADER_PK])
+            label = f"{pk} | {row[HEADER_PROCESS_LABEL]} | {row[HEADER_STATE]}"
             options.append((label, pk))
         self._selection.options = options
         self._selection.value = tuple(
