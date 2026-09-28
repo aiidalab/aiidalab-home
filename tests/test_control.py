@@ -1382,6 +1382,7 @@ def test_danger_zone_schedule_and_cancel(danger_zone):
     assert _schedule_visible(widget)
 
     widget._mode.value = "2"
+    assert "EVERYTHING" in widget._mode_details.value
     widget._confirm_text.value = "factory-reset"
     widget._schedule_button.click()
 
@@ -1428,6 +1429,21 @@ def test_danger_zone_unknown_mode(danger_zone):
     widget._do_refresh()
     assert not _schedule_visible(widget)
     assert "unknown mode &#x27;7&#x27;" in widget._scheduled_alert.value
+
+
+def test_danger_zone_unreadable_flag_file(danger_zone):
+    # A directory in place of the flag file exists, but can't be read or
+    # removed.
+    widget, flag_file = danger_zone
+    flag_file.mkdir()
+    widget._do_refresh()
+    assert not _schedule_visible(widget)
+    assert "could not be read" in widget._scheduled_alert.value
+
+    widget._on_cancel()
+    assert State.ERROR.color in widget.info.value
+    assert "Failed to cancel" in widget.info.value
+    assert not _schedule_visible(widget)
 
 
 @pytest.mark.parametrize("value", ["1", "0"])
