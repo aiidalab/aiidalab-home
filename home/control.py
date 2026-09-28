@@ -158,11 +158,10 @@ def _probe_daemon_workers(client) -> tuple[State, str, dict | None]:
         # down, so only call it after confirming that the daemon is running.
         if not client.is_daemon_running:
             return State.WARNING, "Daemon is not running", None
-        try:
-            workers = client.get_worker_info().get("info", {})
-        except DaemonNotRunningException:
-            # The daemon stopped between the check and the call.
-            return State.WARNING, "Daemon is not running", None
+        workers = client.get_worker_info().get("info", {})
+    except DaemonNotRunningException:
+        # The daemon stopped between the check and the call.
+        return State.WARNING, "Daemon is not running", None
     except Exception as exc:
         return State.ERROR, str(exc), None
     if not workers:
@@ -290,29 +289,19 @@ class DaemonControlWidget(ControlSectionWidget):
         )
         self._log_accordion.observe(self._reload_log_if_open, names="selected_index")
 
-        super().__init__(
-            [
-                self._status,
-                self._worker_table,
-                ipw.HBox(
-                    [
-                        self.start_button,
-                        self.stop_button,
-                        self.restart_button,
-                        self.add_worker_button,
-                        self.remove_worker_button,
-                    ]
-                ),
-                self._log_accordion,
-            ]
-        )
-        self._action_buttons = [
+        buttons = [
             self.start_button,
             self.stop_button,
             self.restart_button,
             self.add_worker_button,
             self.remove_worker_button,
         ]
+        super().__init__(
+            [self._status, self._worker_table, ipw.HBox(buttons), self._log_accordion]
+        )
+        # super().__init__() creates the refresh button; it is disabled during
+        # actions too, so that a refresh cannot run alongside one.
+        self._action_buttons = list(buttons)
         if self.refresh_button is not None:
             self._action_buttons.append(self.refresh_button)
 
