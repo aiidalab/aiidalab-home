@@ -476,11 +476,14 @@ def test_repository_path_unknown_backend_raises():
 
 
 def test_du_bytes(tmp_path):
-    (tmp_path / "a").write_bytes(b"x" * 1000)
-    (tmp_path / "b").write_bytes(b"x" * 2345)
-    assert _du_bytes(tmp_path / "a") == 1000
-    # The directory's own entry adds a filesystem-dependent amount.
-    assert _du_bytes(tmp_path) >= 3345
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.write_bytes(b"x" * 1000)
+    b.write_bytes(b"x" * 2345)
+    # Allocated blocks (st_blocks is in 512-byte units), not apparent size.
+    assert _du_bytes(a) == a.stat().st_blocks * 512
+    assert (
+        _du_bytes(tmp_path) == sum(p.stat().st_blocks for p in (tmp_path, a, b)) * 512
+    )
 
 
 def test_du_bytes_missing_path_raises(tmp_path):

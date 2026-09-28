@@ -518,7 +518,10 @@ _DU_TIMEOUT = 120  # seconds
 
 
 def _du_bytes(path) -> int:
-    """Size of `path` in bytes, computed with `du -sb`.
+    """Disk space used by `path` in bytes, computed with `du`.
+
+    Counts allocated blocks, not apparent size: packing frees whole blocks while the
+    apparent size stays put or even grows, so only blocks show what maintenance frees.
 
     `du` is much faster than walking the tree in Python on a disk-objectstore
     repository, which can hold very many small files. It exits nonzero when
@@ -528,7 +531,7 @@ def _du_bytes(path) -> int:
     if not Path(path).exists():
         raise FileNotFoundError(f"{path} does not exist")
     result = subprocess.run(
-        ["du", "-sb", str(path)],
+        ["du", "-s", "--block-size=1", str(path)],
         capture_output=True,
         text=True,
         check=False,
