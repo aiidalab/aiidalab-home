@@ -1011,13 +1011,10 @@ def process_widget(aiida_profile, run_threads_synchronously, monkeypatch):
 
 def _show_rows(widget, *pks):
     """Simulate a process list update displaying the given PKs."""
-    widget.process_list.current_rows = {
-        "headers": ["PK", "Process label", "Process State"],
-        "rows": [
-            {"PK": str(pk), "Process label": f"Job{pk}", "Process State": "Waiting"}
-            for pk in pks
-        ],
-    }
+    widget.process_list.current_rows = [
+        {"PK": str(pk), "Process label": f"Job{pk}", "Process State": "Waiting"}
+        for pk in pks
+    ]
     widget.process_list.updated += 1
 
 

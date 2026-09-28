@@ -190,7 +190,7 @@ def test_process_list_widget_exposes_plain_rows(multiply_add_completed_workchain
     assert widget.updated == updated_before + 1
 
     # The named header constants match what CalculationQueryBuilder emits.
-    headers = widget.current_rows["headers"]
+    headers = widget.current_rows[0].keys()
     for header in (
         home_process.HEADER_PK,
         home_process.HEADER_PROCESS_LABEL,
@@ -200,7 +200,7 @@ def test_process_list_widget_exposes_plain_rows(multiply_add_completed_workchain
 
     (row,) = (
         row
-        for row in widget.current_rows["rows"]
+        for row in widget.current_rows
         if row[home_process.HEADER_PK] == str(multiply_add_completed_workchain.pk)
     )
     assert row[home_process.HEADER_PROCESS_LABEL] == "MultiplyAddWorkChain"

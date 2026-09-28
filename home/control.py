@@ -1138,7 +1138,7 @@ class ProcessControlWidget(ControlSectionWidget):
         """List the displayed processes, keeping the selected ones selected."""
         previous_selection = set(self._selection.value)
         options = []
-        for row in self.process_list.current_rows["rows"]:
+        for row in self.process_list.current_rows:
             pk = int(row[HEADER_PK])
             label = f"{pk} | {row[HEADER_PROCESS_LABEL]} | {row[HEADER_STATE]}"
             options.append((label, pk))
