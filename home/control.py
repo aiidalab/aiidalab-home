@@ -1536,7 +1536,7 @@ class DangerZoneWidget(ControlSectionWidget):
         return (
             "<div class='alert alert-warning' role='alert'>"
             f"A factory reset is scheduled: <b>{html.escape(what)}</b><br>"
-            "It is performed the next time this container is restarted (e.g. "
-            "with <code>aiidalab-launch restart</code>). Until then, it can be "
-            "cancelled.</div>"
+            "It is performed the next time this AiiDAlab container starts, i.e. "
+            "after your AiiDAlab server has been stopped and started again. "
+            "Until then, it can be cancelled.</div>"
         )
