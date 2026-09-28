@@ -322,7 +322,7 @@ class DaemonControlWidget(ControlSectionWidget):
             return
         self._run_action(
             "start the daemon",
-            self._daemon.start_daemon,
+            self._start,
             "Starting the daemon...",
             "The daemon has been started.",
         )
@@ -368,11 +368,17 @@ class DaemonControlWidget(ControlSectionWidget):
             "A worker has been removed.",
         )
 
+    def _start(self):
+        # Like `verdi daemon start`, start the configured number of workers.
+        self._daemon.start_daemon(
+            number_workers=manage.get_config_option("daemon.default_workers")
+        )
+
     def _restart_or_start(self):
         try:
             return self._daemon.restart_daemon()
         except DaemonNotRunningException:
-            self._daemon.start_daemon()
+            self._start()
 
     def _remove_worker(self):
         # The button state can be stale, so re-check the live worker count.

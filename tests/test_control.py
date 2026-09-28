@@ -820,9 +820,10 @@ class _FakeDaemon:
     def get_number_of_workers(self):
         return len(self.get_worker_info()["info"])
 
-    def start_daemon(self):
+    def start_daemon(self, number_workers):
         self.calls.append("start")
         self.running = True
+        self.workers = number_workers
 
     def stop_daemon(self):
         self.calls.append("stop")
@@ -894,8 +895,15 @@ def _assert_action_buttons_enabled(widget):
         assert button.disabled is False
 
 
-def test_daemon_stop_and_start(daemon_widget):
+def _configure_default_workers(monkeypatch, number):
+    """Make the `daemon.default_workers` config option return `number`."""
+    options = {"daemon.default_workers": number}
+    monkeypatch.setattr(control_module.manage, "get_config_option", options.__getitem__)
+
+
+def test_daemon_stop_and_start(daemon_widget, monkeypatch):
     widget, daemon = daemon_widget
+    _configure_default_workers(monkeypatch, 3)
 
     widget.stop_button.click()
     assert daemon.calls == ["stop"]
@@ -906,7 +914,7 @@ def test_daemon_stop_and_start(daemon_widget):
     widget.start_button.click()
     assert daemon.calls == ["stop", "start"]
     assert "The daemon has been started." in widget.info.value
-    assert "2 worker" in widget._status.value
+    assert "3 worker" in widget._status.value
     _assert_action_buttons_enabled(widget)
 
 
@@ -917,11 +925,13 @@ def test_daemon_start_when_running_only_warns(daemon_widget):
     assert "already running" in widget.info.value
 
 
-def test_daemon_restart_falls_back_to_start(daemon_widget):
+def test_daemon_restart_falls_back_to_start(daemon_widget, monkeypatch):
     widget, daemon = daemon_widget
+    _configure_default_workers(monkeypatch, 3)
     daemon.running = False
     widget.restart_button.click()
     assert daemon.calls == ["restart", "start"]
+    assert daemon.workers == 3
     assert "The daemon has been restarted." in widget.info.value
 
 
