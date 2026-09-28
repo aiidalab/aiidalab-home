@@ -370,7 +370,7 @@ class DaemonControlWidget(ControlSectionWidget):
 
     def _restart_or_start(self):
         try:
-            self._daemon.restart_daemon()
+            return self._daemon.restart_daemon()
         except DaemonNotRunningException:
             self._daemon.start_daemon()
 
@@ -378,7 +378,7 @@ class DaemonControlWidget(ControlSectionWidget):
         # The button state can be stale, so re-check the live worker count.
         if self._daemon.get_number_of_workers() <= 1:
             raise RuntimeError("at least one worker is required")
-        self._daemon.decrease_workers(1)
+        return self._daemon.decrease_workers(1)
 
     def _run_action(self, action_name, action, in_progress_message, success_message):
         if self._busy:
@@ -390,7 +390,12 @@ class DaemonControlWidget(ControlSectionWidget):
 
         def worker():
             try:
-                action()
+                response = action()
+                # circus refuses a command that clashes with one still running
+                # (e.g. a removed worker still shutting down) in its reply
+                # instead of raising.
+                if response and response.get("status") == "error":
+                    raise RuntimeError(response["reason"])
             except Exception as exc:
                 self.show_error(f"Failed to {action_name}: {exc}")
             else:

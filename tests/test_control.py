@@ -960,6 +960,21 @@ def test_daemon_remove_last_worker_is_refused(daemon_widget):
     assert "at least one worker is required" in widget.info.value
 
 
+def test_daemon_refused_command_is_shown(daemon_widget, monkeypatch):
+    widget, daemon = daemon_widget
+    # circus refuses a command while another holds its lock (here, a removed
+    # worker still shutting down) and says so in its reply, without raising.
+    refusal = {
+        "status": "error",
+        "reason": "arbiter is already running watcher_decr command",
+    }
+    monkeypatch.setattr(daemon, "decrease_workers", lambda number: refusal)
+    widget.remove_worker_button.click()
+    assert State.ERROR.color in widget.info.value
+    assert "Failed to remove a worker: arbiter is already running" in widget.info.value
+    _assert_action_buttons_enabled(widget)
+
+
 def test_daemon_refresh_skipped_while_busy(daemon_widget, monkeypatch):
     widget, _ = daemon_widget
     calls = []
