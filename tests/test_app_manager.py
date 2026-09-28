@@ -1,5 +1,4 @@
 from subprocess import CalledProcessError
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -22,13 +21,14 @@ def test_reinstall_callback(error):
         if error is not None:
             raise error
 
-    app = SimpleNamespace(reinstall_app=Mock(side_effect=reinstall))
-    manager = SimpleNamespace(
-        app=app,
-        dependencies_log=log,
-        _show_msg_success=Mock(),
-        _show_msg_failure=Mock(),
-    )
+    app = Mock()
+    app.reinstall_app.side_effect = reinstall
+    manager = AppManagerWidget.__new__(AppManagerWidget)
+    manager.app = app
+    manager.dependencies_log = log
+    manager._show_msg_success = Mock()
+    manager._show_msg_failure = Mock()
+
     try:
         AppManagerWidget._reinstall_app(manager, None)
 
