@@ -949,6 +949,21 @@ def test_daemon_restart_failure_is_shown(daemon_widget, monkeypatch):
     _assert_action_buttons_enabled(widget)
 
 
+def test_daemon_failing_status_probe_after_action(daemon_widget, monkeypatch):
+    widget, daemon = daemon_widget
+
+    def _raise():
+        raise RuntimeError("probe failed")
+
+    monkeypatch.setattr(widget, "_update_status", _raise)
+    widget.stop_button.click()
+    assert daemon.calls == ["stop"]
+    # The action's own result stays visible, followed by the probe failure.
+    assert "The daemon has been stopped." in widget.info.value
+    assert "Failed to refresh the status: probe failed" in widget.info.value
+    _assert_action_buttons_enabled(widget)
+
+
 def test_daemon_add_and_remove_worker(daemon_widget):
     widget, daemon = daemon_widget
     widget.add_worker_button.click()
