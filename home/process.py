@@ -648,7 +648,7 @@ class ProcessListWidget(ipw.VBox):
         self.table = ipw.HTML()
         self.output = ipw.HTML()
         # The displayed rows as plain values, without the HTML links.
-        self.current_rows = {"headers": [], "rows": []}
+        self.current_rows: list[dict[str, str]] = []
         update_button = ipw.Button(description="Update now")
         update_button.on_click(self.update)
         super().__init__(
@@ -667,7 +667,7 @@ class ProcessListWidget(ipw.VBox):
             )
             return
 
-        self.current_rows = {"headers": headers, "rows": rows}
+        self.current_rows = rows
         self.output.value = f"{len(rows)} processes shown"
 
         # Add HTML links.
