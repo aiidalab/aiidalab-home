@@ -1,5 +1,6 @@
 import re
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
@@ -10,6 +11,7 @@ import home.control as control_module
 from home.control import (
     AiidaStatusOverviewWidget,
     ControlSectionWidget,
+    DangerZoneWidget,
     State,
     SystemResourcesWidget,
     _cpu_status,
@@ -444,3 +446,109 @@ def test_system_resources_do_refresh_partial_failure(
     # ...but CPU and disk still updated independently.
     assert widget._cpu_bar.bar_style == "success"
     assert widget._disk_bar.bar_style == "success"
+
+
+@pytest.fixture
+def danger_zone(tmp_path, monkeypatch):
+    """A DangerZoneWidget whose flag file is a temporary path.
+
+    Never let a test write the real ~/AIIDALAB_FACTORY_RESET: a leftover
+    file erases data on the next container restart.
+    """
+    flag_file = tmp_path / "AIIDALAB_FACTORY_RESET"
+    monkeypatch.setattr(control_module, "_FACTORY_RESET_FILE", flag_file)
+    monkeypatch.delenv("AIIDALAB_FACTORY_RESET", raising=False)
+    widget = DangerZoneWidget()
+    widget._do_refresh()
+    return widget, flag_file
+
+
+def _schedule_visible(widget):
+    return widget._schedule_box.layout.display != "none"
+
+
+def test_danger_zone_button_needs_confirmation_phrase(danger_zone):
+    widget, _ = danger_zone
+    assert widget._schedule_button.disabled is True
+    widget._confirm_text.value = "factory"
+    assert widget._schedule_button.disabled is True
+    widget._confirm_text.value = "  factory-reset  "
+    assert widget._schedule_button.disabled is False
+    widget._confirm_text.value = "factory-reset!"
+    assert widget._schedule_button.disabled is True
+
+
+def test_danger_zone_schedule_and_cancel(danger_zone):
+    widget, flag_file = danger_zone
+    assert _schedule_visible(widget)
+
+    widget._mode.value = "2"
+    widget._confirm_text.value = "factory-reset"
+    widget._schedule_button.click()
+
+    assert flag_file.read_text() == "2"
+    assert not _schedule_visible(widget)
+    assert "Full factory reset" in widget._scheduled_alert.value
+    # The confirmation is cleared, so the button is disarmed again.
+    assert widget._confirm_text.value == ""
+    assert widget._schedule_button.disabled is True
+
+    widget._on_cancel()
+    assert not flag_file.exists()
+    assert _schedule_visible(widget)
+    assert widget.info.value == ""
+
+    # Cancelling a reset that is already gone is not an error.
+    widget._on_cancel()
+    assert widget.info.value == ""
+
+
+def test_danger_zone_unverified_write_is_an_error(danger_zone, monkeypatch):
+    widget, flag_file = danger_zone
+    original_read_text = Path.read_text
+
+    def _read_text(self, *args, **kwargs):
+        if self == flag_file:
+            return "garbled"
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", _read_text)
+    widget._confirm_text.value = "factory-reset"
+    widget._schedule_button.click()
+
+    assert State.ERROR.color in widget.info.value
+    assert "could not verify" in widget.info.value
+    # What is on disk is shown, with a way to cancel it.
+    assert not _schedule_visible(widget)
+    assert "unknown mode" in widget._scheduled_alert.value
+
+
+def test_danger_zone_unknown_mode(danger_zone):
+    widget, flag_file = danger_zone
+    flag_file.write_text("7")
+    widget._do_refresh()
+    assert not _schedule_visible(widget)
+    assert "unknown mode &#x27;7&#x27;" in widget._scheduled_alert.value
+
+
+@pytest.mark.parametrize("value", ["1", "0"])
+def test_danger_zone_env_var_warning(danger_zone, monkeypatch, value):
+    # Any non-empty value overrides the flag file, even "0".
+    widget, _ = danger_zone
+    monkeypatch.setenv("AIIDALAB_FACTORY_RESET", value)
+    widget._do_refresh()
+    assert "takes precedence" in widget._env_warning.value
+    assert f"set to &#x27;{value}&#x27;" in widget._env_warning.value
+
+
+def test_danger_zone_empty_env_var_is_ignored(danger_zone, monkeypatch):
+    # The container script treats an empty variable as unset.
+    widget, _ = danger_zone
+    monkeypatch.setenv("AIIDALAB_FACTORY_RESET", "")
+    widget._do_refresh()
+    assert widget._env_warning.value == ""
+
+
+def test_real_factory_reset_file_was_not_created():
+    # Keep last: nothing above may have written the real flag file.
+    assert not (Path.home() / "AIIDALAB_FACTORY_RESET").exists()
