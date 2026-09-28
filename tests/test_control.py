@@ -520,25 +520,22 @@ def test_list_log_handler_collects_messages():
     assert handler.lines == ["packing 3 files"]
 
 
-def test_storage_do_refresh(aiida_profile, run_threads_synchronously):
+def test_storage_do_refresh(
+    aiida_profile, run_threads_synchronously, monkeypatch, tmp_path
+):
+    # A missing apps directory must fail only its own row.
+    monkeypatch.setattr(control_module, "AIIDALAB_APPS", str(tmp_path / "missing"))
     widget = StorageWidget()
     widget.refresh()
     table = widget._table.value
     assert aiida_profile.name in table
 
-    # The installed apps directory may not exist in every test environment;
-    # the profile's own storage rows must always succeed.
     rows = re.findall(r"<tr>.*?</tr>", table)
-    checked_rows = [
-        row
-        for row in rows
-        if any(
-            f"<b>{label}</b>" in row
-            for label in ("Profile", "File repository", "Database")
-        )
-    ]
-    assert len(checked_rows) == 3
-    assert not any(State.ERROR.color in row for row in checked_rows)
+    assert len(rows) == 5
+    failed = [row for row in rows if State.ERROR.color in row]
+    assert len(failed) == 1
+    assert "<b>Installed apps</b>" in failed[0]
+    assert "does not exist" in failed[0]
 
 
 def test_storage_refresh_skipped_while_maintaining(
