@@ -554,6 +554,7 @@ class AppManagerWidget(ipw.VBox):
 
     def _reinstall_app(self, _):
         """Attempt to reinstall the app dependencies in place."""
+        self.dependencies_log.value = ""
         try:
             self.app.reinstall_app(stdout=self.dependencies_log)
         except (AssertionError, RuntimeError, CalledProcessError) as error:

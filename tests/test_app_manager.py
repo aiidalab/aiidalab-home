@@ -9,14 +9,20 @@ from home.widgets import LogOutputWidget
 
 @pytest.mark.parametrize(
     "error",
-    [None, RuntimeError("pip failed"), CalledProcessError(1, "post_install")],
+    [
+        None,
+        RuntimeError("pip failed"),
+        CalledProcessError(1, "post_install"),
+    ],
     ids=["success", "pip-failure", "post-install-failure"],
 )
 def test_reinstall_callback(error):
     log = LogOutputWidget()
+    log.value = "previous operation output\n"
 
     def reinstall(*, stdout):
         assert stdout is log
+        assert stdout.value == ""
         stdout.write("installation output\n")
         if error is not None:
             raise error
