@@ -524,7 +524,7 @@ class AppManagerWidget(ipw.VBox):
             version = self.app.install_app(
                 version=version, stdout=self.dependencies_log
             )  # argument may be None
-        except (AssertionError, RuntimeError, CalledProcessError) as error:
+        except (RuntimeError, CalledProcessError) as error:
             self._show_msg_failure(str(error))
         else:
             self._show_msg_success(
@@ -537,7 +537,7 @@ class AppManagerWidget(ipw.VBox):
         try:
             self._check_detached_state()
             self.app.update_app(stdout=self.dependencies_log)
-        except (AssertionError, RuntimeError, CalledProcessError) as error:
+        except (RuntimeError, CalledProcessError) as error:
             self._show_msg_failure(str(error))
         else:
             self._show_msg_success("Updated app.")
