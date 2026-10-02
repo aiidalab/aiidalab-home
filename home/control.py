@@ -6,16 +6,21 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import threading
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Protocol
+from urllib.parse import unquote, urlparse
 
 import aiida
 import ipywidgets as ipw
+import sqlalchemy as sa
 from aiida import get_profile, manage, orm
 from aiida.engine.daemon.client import DaemonException
+from aiida.storage.log import STORAGE_LOGGER
+from aiidalab.config import AIIDALAB_APPS
 
 from home.themes import ThemeDefault as Theme
 
@@ -23,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class _DaemonClient(Protocol):
-    """The subset of `DaemonClient` that `_probe_daemon` relies on."""
+    """The subset of `DaemonClient` that the control sections rely on."""
 
     @property
     def is_daemon_running(self) -> bool: ...
@@ -497,11 +502,245 @@ class SystemResourcesWidget(ControlSectionWidget):
             self._set_row_error(self._disk_bar, self._disk_label, exc)
 
 
+def _repository_path(profile) -> Path:
+    """Directory holding the profile's file repository.
+
+    For core.sqlite_dos this directory also holds the database file.
+    """
+    backend = profile.storage_backend
+    if backend == "core.psql_dos":
+        # Written by AiiDA with Path.as_uri(), i.e. percent-encoded.
+        uri = profile.storage_config["repository_uri"]
+        return Path(unquote(urlparse(uri).path))
+    if backend == "core.sqlite_dos":
+        return Path(profile.storage_config["filepath"])
+    raise ValueError(f"not available for backend {backend}")
+
+
+_DU_TIMEOUT = 120  # seconds
+
+
+def _du_bytes(path) -> int:
+    """Disk space used by `path` in bytes, computed with `du`.
+
+    Counts allocated blocks, not apparent size: packing frees whole blocks while the
+    apparent size stays put or even grows, so only blocks show what maintenance frees.
+
+    `du` is much faster than walking the tree in Python on a disk-objectstore
+    repository, which can hold very many small files. It exits nonzero when
+    a file vanishes mid-scan (e.g. during maintenance), so its numeric output
+    is trusted regardless of the exit code.
+    """
+    if not Path(path).exists():
+        raise FileNotFoundError(f"{path} does not exist")
+    result = subprocess.run(
+        ["du", "-s", "--block-size=1", str(path)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=_DU_TIMEOUT,
+    )
+    try:
+        return int(result.stdout.split()[0])
+    except (IndexError, ValueError) as exc:
+        raise RuntimeError(f"could not determine the size of {path}") from exc
+
+
+def _repository_size_or_none(profile) -> int | None:
+    """Best-effort repository size, for reporting the space maintenance reclaimed."""
+    try:
+        return _du_bytes(_repository_path(profile))
+    except Exception:
+        return None
+
+
+def _database_size_bytes(storage) -> int:
+    """Size of the PostgreSQL database in bytes (core.psql_dos only)."""
+    # Deliberately not closed: this is AiiDA's own thread-local session.
+    session = storage.get_session()
+    query = sa.text("SELECT pg_database_size(current_database())")
+    return session.execute(query).scalar_one()
+
+
+class _ListLogHandler(logging.Handler):
+    """Collects log messages, so they can be shown to the user."""
+
+    def __init__(self):
+        super().__init__()
+        self.lines: list[str] = []
+
+    def emit(self, record):
+        self.lines.append(self.format(record))
+
+
 class StorageWidget(ControlSectionWidget):
     description = "Disk usage of profile data and apps; storage maintenance."
 
     def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+        self._maintaining = False
+        self._daemon: _DaemonClient = manage.get_manager().get_daemon_client()
+        self._table = ipw.HTML()
+
+        self._dry_run_checkbox = ipw.Checkbox(
+            value=True,
+            description="Dry run (only report what would be done)",
+            indent=False,
+            layout=ipw.Layout(width="auto"),
+        )
+        self._full_checkbox = ipw.Checkbox(
+            value=False,
+            description=(
+                "Full maintenance (needs exclusive access: "
+                "stop the daemon and close other AiiDAlab apps)"
+            ),
+            indent=False,
+            layout=ipw.Layout(width="auto"),
+        )
+        self._maintain_button = ipw.Button(
+            description="Run maintenance", button_style="warning", icon="wrench"
+        )
+        self._maintain_button.on_click(self._on_maintain_clicked)
+        self._maintain_output = ipw.HTML()
+
+        super().__init__(
+            [
+                self._table,
+                ipw.HTML("<h4>Maintenance</h4>"),
+                self._dry_run_checkbox,
+                self._full_checkbox,
+                self._maintain_button,
+                self._maintain_output,
+            ]
+        )
+
+    @staticmethod
+    def _row(label, usage, *args):
+        """Table row showing `usage(*args)`, or its error if it raises."""
+        try:
+            text, color = usage(*args), "inherit"
+        except Exception as exc:
+            text, color = str(exc), State.ERROR.color
+        return (
+            "<tr>"
+            f"<td style='padding:1px 8px;'><b>{html.escape(label)}</b></td>"
+            f"<td style='color:{color};padding:1px 8px;'>{html.escape(text)}</td>"
+            "</tr>"
+        )
+
+    @staticmethod
+    def _repository_usage(profile):
+        path = _repository_path(profile)
+        return f"{_format_bytes(_du_bytes(path))} — {path}"
+
+    @staticmethod
+    def _database_usage(profile):
+        backend = profile.storage_backend
+        if backend == "core.sqlite_dos":
+            return "included in the file repository"
+        if backend == "core.psql_dos":
+            storage = manage.get_manager().get_profile_storage()
+            return _format_bytes(_database_size_bytes(storage))
+        raise ValueError(f"not available for backend {backend}")
+
+    @staticmethod
+    def _apps_usage():
+        return f"{_format_bytes(_du_bytes(AIIDALAB_APPS))} — {AIIDALAB_APPS}"
+
+    @staticmethod
+    def _home_usage():
+        used, total = _disk_status()
+        return f"{_format_bytes(used)} used of {_format_bytes(total)} — {Path.home()}"
+
+    def _do_refresh(self):
+        profile = get_profile()
+        if profile is None:
+            raise RuntimeError("no AiiDA profile is loaded")
+        rows = (
+            self._row("Profile", lambda: profile.name),
+            self._row("File repository", self._repository_usage, profile),
+            self._row("Database", self._database_usage, profile),
+            self._row("Installed apps", self._apps_usage),
+            self._row("Home filesystem", self._home_usage),
+        )
+        self._table.value = (
+            "<table style='border-collapse:collapse;'>" + "".join(rows) + "</table>"
+        )
+
+    def refresh(self, _=None):
+        # Don't measure the repository while maintenance rewrites it (e.g. when
+        # the tab is revisited); the maintenance run refreshes when it is done.
+        if not self._maintaining:
+            super().refresh()
+
+    def _set_controls_disabled(self, disabled):
+        self._dry_run_checkbox.disabled = disabled
+        self._full_checkbox.disabled = disabled
+        self._maintain_button.disabled = disabled
+        if self.refresh_button is not None:
+            self.refresh_button.disabled = disabled
+
+    def _on_maintain_clicked(self, _=None):
+        if self._maintaining:
+            return
+        self._maintaining = True
+        self._set_controls_disabled(True)
+        self._maintain_output.value = (
+            "Running maintenance... <i class='fa fa-spinner fa-spin'></i>"
+        )
+        full = self._full_checkbox.value
+        dry_run = self._dry_run_checkbox.value
+
+        def worker():
+            try:
+                self._maintain_output.value = self._maintain(full, dry_run)
+            except Exception as exc:
+                self._maintain_output.value = _state_span(
+                    State.ERROR, f"Maintenance failed: {exc}"
+                )
+            finally:
+                # Re-enable the controls before refreshing the table, so that
+                # a failing refresh cannot leave them disabled.
+                self._maintaining = False
+                self._set_controls_disabled(False)
+                if not dry_run:
+                    self.refresh()
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _maintain(self, full, dry_run):
+        """Run the storage maintenance and return the report as HTML."""
+        # A friendly pre-check: full maintenance locks the profile, which
+        # fails anyway while the daemon is using it.
+        if full and self._daemon.is_daemon_running:
+            return _state_span(
+                State.WARNING,
+                "Full maintenance needs exclusive access to the profile. "
+                "Stop the daemon first (Daemon tab) and close other AiiDAlab apps.",
+            )
+
+        profile = get_profile()
+        storage = manage.get_manager().get_profile_storage()
+        before = None if dry_run else _repository_size_or_none(profile)
+
+        # Maintenance reports its progress at INFO level, below AiiDA's default.
+        handler = _ListLogHandler()
+        previous_level = STORAGE_LOGGER.level
+        STORAGE_LOGGER.setLevel(logging.INFO)
+        STORAGE_LOGGER.addHandler(handler)
+        try:
+            storage.maintain(full=full, dry_run=dry_run)
+        finally:
+            STORAGE_LOGGER.removeHandler(handler)
+            STORAGE_LOGGER.setLevel(previous_level)
+
+        lines = [html.escape(line) for line in handler.lines] or ["(no log output)"]
+        if before is not None:
+            after = _repository_size_or_none(profile)
+            if after is not None:
+                reclaimed = _format_bytes(max(before - after, 0))
+                lines.append(f"<b>Reclaimed {reclaimed} of repository space.</b>")
+        summary = "Dry run finished." if dry_run else "Maintenance finished."
+        return _state_span(State.OK, summary) + "<br>" + "<br>".join(lines)
 
 
 class ProcessControlWidget(ControlSectionWidget):
