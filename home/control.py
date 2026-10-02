@@ -18,7 +18,7 @@ import aiida
 import ipywidgets as ipw
 import sqlalchemy as sa
 from aiida import get_profile, manage, orm
-from aiida.engine.daemon.client import DaemonException
+from aiida.engine.daemon.client import DaemonException, DaemonNotRunningException
 from aiida.storage.log import STORAGE_LOGGER
 from aiidalab.config import AIIDALAB_APPS
 
@@ -148,11 +148,320 @@ class ControlSectionWidget(ipw.VBox):
         """
 
 
+def _probe_daemon_workers(client) -> tuple[State, str, dict | None]:
+    """Probe the daemon and return a (state, text, workers) tuple.
+
+    `workers` maps worker PIDs to their circus stats, or is None if the
+    daemon is not running.
+    """
+    try:
+        # get_worker_info() blocks for the client timeout when the daemon is
+        # down, so only call it after confirming that the daemon is running.
+        if not client.is_daemon_running:
+            return State.WARNING, "Daemon is not running", None
+        workers = client.get_worker_info().get("info", {})
+    except DaemonNotRunningException:
+        # The daemon stopped between the check and the call.
+        return State.WARNING, "Daemon is not running", None
+    except Exception as exc:
+        return State.ERROR, str(exc), None
+    if not workers:
+        # Nothing picks jobs off the queue, as if the daemon were not running.
+        return State.WARNING, "Daemon is running with 0 workers", workers
+    return State.OK, f"Daemon is running with {len(workers)} worker(s)", workers
+
+
+def _humanize_age(seconds) -> str:
+    """Humanize a duration in seconds, e.g. 100905.8 -> '1d 4h'."""
+    try:
+        seconds = int(seconds)
+    except (TypeError, ValueError, OverflowError):
+        return "?"
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    days, hours = divmod(hours, 24)
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes:02d}m"
+    if minutes:
+        return f"{minutes}m"
+    return f"{seconds}s"
+
+
+def _format_percent(value) -> str:
+    # circus reports "N/A" for values it could not read.
+    return f"{value:.1f}%" if isinstance(value, (int, float)) else "?"
+
+
+def _worker_table_html(workers) -> str:
+    """Table of per-worker circus stats, or '' if there are no workers."""
+    if not workers:
+        return ""
+    headers = ("Worker", "PID", "CPU", "Memory", "RSS", "Uptime")
+    rows = [
+        "".join(
+            f"<th style='padding:1px 8px;text-align:left;'>{header}</th>"
+            for header in headers
+        )
+    ]
+    for pid, stats in workers.items():
+        if not isinstance(stats, dict):
+            # circus reports a message instead of stats for a worker that
+            # has just stopped.
+            stats = {}
+        cells = (
+            stats.get("wid", "?"),
+            pid,
+            _format_percent(stats.get("cpu")),
+            _format_percent(stats.get("mem")),
+            stats.get("mem_info1", "?"),
+            _humanize_age(stats.get("age")),
+        )
+        rows.append(
+            "".join(
+                f"<td style='padding:1px 8px;'>{html.escape(str(cell))}</td>"
+                for cell in cells
+            )
+        )
+    return (
+        "<table style='border-collapse:collapse;'>"
+        + "".join(f"<tr>{row}</tr>" for row in rows)
+        + "</table>"
+    )
+
+
+_LOG_TAIL_BYTES = 64 * 1024
+
+
+def _read_log_tail(path, lines) -> str:
+    """The last `lines` lines of the file at `path`.
+
+    Reads at most the last 64 KiB, so a large log is never loaded whole.
+    """
+    try:
+        with Path(path).open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            handle.seek(max(0, handle.tell() - _LOG_TAIL_BYTES))
+            data = handle.read()
+    except FileNotFoundError:
+        return "Log file not found"
+    if not data:
+        return "(log is empty)"
+    return "\n".join(data.decode(errors="replace").splitlines()[-lines:])
+
+
 class DaemonControlWidget(ControlSectionWidget):
     description = "The daemon runs your AiiDA processes in the background."
+    _LOG_TAIL_LINES = 50
 
     def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+        self._busy = False
+        self._daemon = manage.get_manager().get_daemon_client()
+        self._status = ipw.HTML()
+        self._worker_table = ipw.HTML()
+
+        self.start_button = ipw.Button(
+            description="Start daemon", button_style="info", icon="play"
+        )
+        self.start_button.on_click(self._on_start)
+        self.stop_button = ipw.Button(
+            description="Stop daemon", button_style="danger", icon="stop"
+        )
+        self.stop_button.on_click(self._on_stop)
+        self.restart_button = ipw.Button(
+            description="Restart daemon", button_style="warning", icon="repeat"
+        )
+        self.restart_button.on_click(self._on_restart)
+        self.add_worker_button = ipw.Button(description="Add worker", icon="plus")
+        self.add_worker_button.on_click(self._on_add_worker)
+        self.remove_worker_button = ipw.Button(
+            description="Remove worker", icon="minus"
+        )
+        self.remove_worker_button.on_click(self._on_remove_worker)
+
+        self._log_content = ipw.HTML()
+        reload_log_button = ipw.Button(description="Reload log", icon="refresh")
+        reload_log_button.on_click(self._reload_log)
+        self._log_accordion = ipw.Accordion(
+            children=[ipw.VBox([self._log_content, reload_log_button])],
+            titles=[f"Daemon log ({Path(self._daemon.daemon_log_file).name})"],
+            selected_index=None,
+        )
+        self._log_accordion.observe(self._reload_log_if_open, names="selected_index")
+
+        buttons = [
+            self.start_button,
+            self.stop_button,
+            self.restart_button,
+            self.add_worker_button,
+            self.remove_worker_button,
+        ]
+        super().__init__(
+            [self._status, self._worker_table, ipw.HBox(buttons), self._log_accordion]
+        )
+        # super().__init__() creates the refresh button; it is disabled during
+        # actions too, so that a refresh cannot run alongside one.
+        self._action_buttons = list(buttons)
+        if self.refresh_button is not None:
+            self._action_buttons.append(self.refresh_button)
+
+    def _on_start(self, _=None):
+        if self._daemon.is_daemon_running:
+            self.show_warning("The daemon is already running.")
+            return
+        self._run_action(
+            "start the daemon",
+            self._start,
+            "Starting the daemon...",
+            "The daemon has been started.",
+        )
+
+    def _on_stop(self, _=None):
+        if not self._daemon.is_daemon_running:
+            self.show_warning("The daemon is not running.")
+            return
+        self._run_action(
+            "stop the daemon",
+            self._daemon.stop_daemon,
+            "Stopping the daemon...",
+            "The daemon has been stopped.",
+        )
+
+    def _on_restart(self, _=None):
+        self._run_action(
+            "restart the daemon",
+            self._restart_or_start,
+            "Restarting the daemon...",
+            "The daemon has been restarted.",
+        )
+
+    def _on_add_worker(self, _=None):
+        if not self._daemon.is_daemon_running:
+            self.show_warning("The daemon is not running.")
+            return
+        self._run_action(
+            "add a worker",
+            lambda: self._daemon.increase_workers(1),
+            "Adding a worker...",
+            "A worker has been added.",
+        )
+
+    def _on_remove_worker(self, _=None):
+        if not self._daemon.is_daemon_running:
+            self.show_warning("The daemon is not running.")
+            return
+        self._run_action(
+            "remove a worker",
+            self._remove_worker,
+            "Removing a worker...",
+            "A worker has been removed.",
+        )
+
+    def _start(self):
+        # Like `verdi daemon start`, start the configured number of workers.
+        self._daemon.start_daemon(
+            number_workers=manage.get_config_option("daemon.default_workers")
+        )
+
+    def _restart_or_start(self):
+        try:
+            return self._daemon.restart_daemon()
+        except DaemonNotRunningException:
+            self._start()
+
+    def _remove_worker(self):
+        # The button state can be stale, so re-check the live worker count.
+        if self._daemon.get_number_of_workers() <= 1:
+            raise RuntimeError("at least one worker is required")
+        return self._daemon.decrease_workers(1)
+
+    def _run_action(self, action_name, action, in_progress_message, success_message):
+        if self._busy:
+            return
+        self._busy = True
+        for button in self._action_buttons:
+            button.disabled = True
+        self.info.value = f"{in_progress_message} <i class='fa fa-spinner fa-spin'></i>"
+
+        def worker():
+            try:
+                response = action()
+                # circus refuses a command that clashes with one still running
+                # (e.g. a removed worker still shutting down) in its reply
+                # instead of raising.
+                if response and response.get("status") == "error":
+                    raise RuntimeError(response["reason"])
+            except Exception as exc:
+                self.show_error(f"Failed to {action_name}: {exc}")
+            else:
+                self.show_success(success_message)
+            finally:
+                # Re-enable the buttons before re-probing the status, so that
+                # a failing probe cannot leave them all disabled.
+                self._busy = False
+                for button in self._action_buttons:
+                    button.disabled = False
+                try:
+                    self._update_status()
+                except Exception as exc:
+                    self.info.value += "<br>" + _state_span(
+                        State.ERROR, f"Failed to refresh the status: {exc}"
+                    )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def refresh(self, _=None):
+        # A refresh during an action (e.g. when the tab is revisited) would
+        # re-enable buttons; the action re-probes the status when it is done.
+        if not self._busy:
+            super().refresh()
+
+    def _do_refresh(self):
+        self._update_status()
+
+    def _update_status(self):
+        state, text, workers = _probe_daemon_workers(self._daemon)
+        status = _state_span(state, text)
+        cpus = os.cpu_count() or 1
+        if workers and len(workers) > cpus:
+            status += " " + _state_span(
+                State.WARNING, f"(more workers than the {cpus} available CPUs)"
+            )
+        self._status.value = status
+        self._worker_table.value = _worker_table_html(workers)
+
+        running = workers is not None
+        self.add_worker_button.disabled = not running
+        self.add_worker_button.tooltip = "" if running else "The daemon is not running"
+        if not running:
+            self.remove_worker_button.disabled = True
+            self.remove_worker_button.tooltip = "The daemon is not running"
+        elif len(workers) <= 1:
+            self.remove_worker_button.disabled = True
+            self.remove_worker_button.tooltip = "At least one worker is required"
+        else:
+            self.remove_worker_button.disabled = False
+            self.remove_worker_button.tooltip = ""
+
+        self._reload_log_if_open()
+
+    def _reload_log_if_open(self, _=None):
+        if self._log_accordion.selected_index is not None:
+            self._reload_log()
+
+    def _reload_log(self, _=None):
+        try:
+            tail = _read_log_tail(self._daemon.daemon_log_file, self._LOG_TAIL_LINES)
+        except Exception as exc:
+            self._log_content.value = _state_span(
+                State.ERROR, f"Failed to read the log: {exc}"
+            )
+        else:
+            self._log_content.value = (
+                "<pre style='max-height:300px;overflow:auto;font-size:12px;'>"
+                f"{html.escape(tail)}</pre>"
+            )
 
 
 def _storage_summary(profile) -> str | None:

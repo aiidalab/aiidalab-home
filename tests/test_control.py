@@ -6,13 +6,14 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from aiida.engine.daemon.client import DaemonException
+from aiida.engine.daemon.client import DaemonException, DaemonNotRunningException
 from aiida.storage.log import STORAGE_LOGGER
 
 import home.control as control_module
 from home.control import (
     AiidaStatusOverviewWidget,
     ControlSectionWidget,
+    DaemonControlWidget,
     State,
     StorageWidget,
     SystemResourcesWidget,
@@ -20,13 +21,17 @@ from home.control import (
     _DaemonClient,
     _du_bytes,
     _format_bytes,
+    _humanize_age,
     _ListLogHandler,
     _memory_status,
+    _probe_daemon_workers,
     _read_cgroup_quantity,
+    _read_log_tail,
     _repository_path,
     _safe_fraction,
     _sanitize_broker_url,
     _storage_summary,
+    _worker_table_html,
 )
 
 
@@ -658,3 +663,376 @@ def test_storage_dry_run_on_real_storage(aiida_profile, run_threads_synchronousl
     output = widget._maintain_output.value
     assert "Dry run finished." in output
     assert "unreferenced objects" in output
+
+
+@pytest.mark.parametrize(
+    "seconds, expected",
+    [
+        (0, "0s"),
+        (59.9, "59s"),
+        (60, "1m"),
+        (3599, "59m"),
+        (3600, "1h 00m"),
+        (4 * 3600 + 5 * 60, "4h 05m"),
+        (86399, "23h 59m"),
+        (86400, "1d 0h"),
+        (100905.8, "1d 4h"),
+        (None, "?"),
+        ("garbage", "?"),
+        (float("inf"), "?"),
+    ],
+)
+def test_humanize_age(seconds, expected):
+    assert _humanize_age(seconds) == expected
+
+
+def test_read_log_tail(tmp_path):
+    log = tmp_path / "daemon.log"
+    log.write_text("".join(f"line {i}\n" for i in range(100)))
+    tail = _read_log_tail(log, 50)
+    assert tail.splitlines() == [f"line {i}" for i in range(50, 100)]
+
+
+def test_read_log_tail_reads_at_most_the_end(tmp_path, monkeypatch):
+    monkeypatch.setattr(control_module, "_LOG_TAIL_BYTES", 20)
+    log = tmp_path / "daemon.log"
+    log.write_text("first line\n" + "x" * 100 + "\nlast line\n")
+    assert _read_log_tail(log, 50).splitlines()[-1] == "last line"
+    assert "first line" not in _read_log_tail(log, 50)
+
+
+def test_read_log_tail_empty_and_missing(tmp_path):
+    log = tmp_path / "daemon.log"
+    assert _read_log_tail(log, 50) == "Log file not found"
+    log.write_text("")
+    assert _read_log_tail(log, 50) == "(log is empty)"
+
+
+def test_worker_table_html():
+    workers = {
+        "1234": {
+            "wid": 1,
+            "cpu": 12.34,
+            "mem": 0.5,
+            "mem_info1": "150M",
+            "age": 3700,
+        },
+        "5678": {"wid": 2, "cpu": "N/A", "mem": "N/A", "mem_info1": "N/A"},
+        # circus reports a message for a worker that has just stopped.
+        "9999": "No such process (stopped?)",
+    }
+    table = _worker_table_html(workers)
+    rows = re.findall(r"<tr>.*?</tr>", table)
+    assert len(rows) == 4  # header + 3 workers
+    assert "1234" in rows[1]
+    assert "12.3%" in rows[1]
+    assert "150M" in rows[1]
+    assert "1h 01m" in rows[1]
+    assert "?" in rows[2]
+    assert "9999" in rows[3]
+
+
+@pytest.mark.parametrize("workers", [None, {}])
+def test_worker_table_html_no_workers(workers):
+    assert _worker_table_html(workers) == ""
+
+
+def _fake_daemon_client(**kwargs):
+    return SimpleNamespace(**kwargs)
+
+
+def test_probe_daemon_workers_not_running():
+    client = _fake_daemon_client(is_daemon_running=False, get_worker_info=None)
+    assert _probe_daemon_workers(client) == (
+        State.WARNING,
+        "Daemon is not running",
+        None,
+    )
+
+
+def test_probe_daemon_workers_running():
+    info = {"info": {"1": {"wid": 1}, "2": {"wid": 2}}}
+    client = _fake_daemon_client(is_daemon_running=True, get_worker_info=lambda: info)
+    state, text, workers = _probe_daemon_workers(client)
+    assert state == State.OK
+    assert "2 worker" in text
+    assert workers == info["info"]
+
+
+def test_probe_daemon_workers_running_without_workers():
+    client = _fake_daemon_client(
+        is_daemon_running=True, get_worker_info=lambda: {"info": {}}
+    )
+    state, text, workers = _probe_daemon_workers(client)
+    assert state == State.WARNING
+    assert "0 workers" in text
+    assert workers == {}
+
+
+def test_probe_daemon_workers_stopped_in_between():
+    def _raise():
+        raise DaemonNotRunningException("The daemon is not running.")
+
+    client = _fake_daemon_client(is_daemon_running=True, get_worker_info=_raise)
+    assert _probe_daemon_workers(client) == (
+        State.WARNING,
+        "Daemon is not running",
+        None,
+    )
+
+
+def test_probe_daemon_workers_unreachable_is_an_error():
+    def _raise():
+        raise DaemonException("stale PID file")
+
+    client = _fake_daemon_client(is_daemon_running=True, get_worker_info=_raise)
+    assert _probe_daemon_workers(client) == (State.ERROR, "stale PID file", None)
+
+
+def test_probe_daemon_workers_is_running_raises():
+    class _Client:
+        @property
+        def is_daemon_running(self):
+            raise RuntimeError("no profile")
+
+    assert _probe_daemon_workers(_Client()) == (State.ERROR, "no profile", None)
+
+
+class _FakeDaemon:
+    """A DaemonClient stand-in recording the calls made to it."""
+
+    daemon_log_file = "/nonexistent/aiida-test.log"
+
+    def __init__(self, running=True, workers=2):
+        self.running = running
+        self.workers = workers
+        self.calls = []
+
+    @property
+    def is_daemon_running(self):
+        return self.running
+
+    def get_worker_info(self):
+        if not self.running:
+            raise DaemonNotRunningException("The daemon is not running.")
+        return {"info": {str(pid): {"wid": pid} for pid in range(self.workers)}}
+
+    def get_number_of_workers(self):
+        return len(self.get_worker_info()["info"])
+
+    def start_daemon(self, number_workers):
+        self.calls.append("start")
+        self.running = True
+        self.workers = number_workers
+
+    def stop_daemon(self):
+        self.calls.append("stop")
+        self.running = False
+
+    def restart_daemon(self):
+        self.calls.append("restart")
+        if not self.running:
+            raise DaemonNotRunningException("The daemon is not running.")
+
+    def increase_workers(self, number):
+        self.calls.append(("increase", number))
+        self.workers += number
+
+    def decrease_workers(self, number):
+        self.calls.append(("decrease", number))
+        self.workers -= number
+
+
+@pytest.fixture
+def daemon_widget(aiida_profile, run_threads_synchronously, monkeypatch):
+    """A DaemonControlWidget driving a fake daemon."""
+    daemon = _FakeDaemon()
+    widget = DaemonControlWidget()
+    monkeypatch.setattr(widget, "_daemon", daemon)
+    return widget, daemon
+
+
+def test_daemon_buttons_when_stopped(daemon_widget):
+    widget, daemon = daemon_widget
+    daemon.running = False
+    widget._update_status()
+    assert "not running" in widget._status.value
+    assert widget.add_worker_button.disabled is True
+    assert widget.remove_worker_button.disabled is True
+    assert widget.remove_worker_button.tooltip == "The daemon is not running"
+
+
+def test_daemon_remove_worker_disabled_at_one_worker(daemon_widget):
+    widget, daemon = daemon_widget
+    daemon.workers = 1
+    widget._update_status()
+    assert widget.add_worker_button.disabled is False
+    assert widget.remove_worker_button.disabled is True
+    assert widget.remove_worker_button.tooltip == "At least one worker is required"
+
+    daemon.workers = 2
+    widget._update_status()
+    assert widget.remove_worker_button.disabled is False
+    assert "2 worker" in widget._status.value
+    assert widget._worker_table.value.count("<tr>") == 3
+
+
+def test_daemon_warns_about_more_workers_than_cpus(daemon_widget, monkeypatch):
+    widget, _ = daemon_widget
+    monkeypatch.setattr(control_module.os, "cpu_count", lambda: 1)
+    widget._update_status()
+    assert "more workers than the 1 available CPUs" in widget._status.value
+
+
+def _assert_action_buttons_enabled(widget):
+    assert widget._busy is False
+    for button in (
+        widget.start_button,
+        widget.stop_button,
+        widget.restart_button,
+        widget.refresh_button,
+    ):
+        assert button.disabled is False
+
+
+def _configure_default_workers(monkeypatch, number):
+    """Make the `daemon.default_workers` config option return `number`."""
+    options = {"daemon.default_workers": number}
+    monkeypatch.setattr(control_module.manage, "get_config_option", options.__getitem__)
+
+
+def test_daemon_stop_and_start(daemon_widget, monkeypatch):
+    widget, daemon = daemon_widget
+    _configure_default_workers(monkeypatch, 3)
+
+    widget.stop_button.click()
+    assert daemon.calls == ["stop"]
+    assert "The daemon has been stopped." in widget.info.value
+    assert "not running" in widget._status.value
+    _assert_action_buttons_enabled(widget)
+
+    widget.start_button.click()
+    assert daemon.calls == ["stop", "start"]
+    assert "The daemon has been started." in widget.info.value
+    assert "3 worker" in widget._status.value
+    _assert_action_buttons_enabled(widget)
+
+
+def test_daemon_start_when_running_only_warns(daemon_widget):
+    widget, daemon = daemon_widget
+    widget.start_button.click()
+    assert daemon.calls == []
+    assert "already running" in widget.info.value
+
+
+def test_daemon_restart_falls_back_to_start(daemon_widget, monkeypatch):
+    widget, daemon = daemon_widget
+    _configure_default_workers(monkeypatch, 3)
+    daemon.running = False
+    widget.restart_button.click()
+    assert daemon.calls == ["restart", "start"]
+    assert daemon.workers == 3
+    assert "The daemon has been restarted." in widget.info.value
+
+
+def test_daemon_restart_failure_is_shown(daemon_widget, monkeypatch):
+    widget, daemon = daemon_widget
+
+    def _raise():
+        raise DaemonException("Connection to the daemon timed out.")
+
+    monkeypatch.setattr(daemon, "restart_daemon", _raise)
+    widget.restart_button.click()
+    assert daemon.calls == []
+    assert State.ERROR.color in widget.info.value
+    assert "Failed to restart the daemon: Connection" in widget.info.value
+    _assert_action_buttons_enabled(widget)
+
+
+def test_daemon_failing_status_probe_after_action(daemon_widget, monkeypatch):
+    widget, daemon = daemon_widget
+
+    def _raise():
+        raise RuntimeError("probe failed")
+
+    monkeypatch.setattr(widget, "_update_status", _raise)
+    widget.stop_button.click()
+    assert daemon.calls == ["stop"]
+    # The action's own result stays visible, followed by the probe failure.
+    assert "The daemon has been stopped." in widget.info.value
+    assert "Failed to refresh the status: probe failed" in widget.info.value
+    _assert_action_buttons_enabled(widget)
+
+
+def test_daemon_add_and_remove_worker(daemon_widget):
+    widget, daemon = daemon_widget
+    widget.add_worker_button.click()
+    assert daemon.workers == 3
+    assert "3 worker" in widget._status.value
+
+    widget.remove_worker_button.click()
+    assert daemon.workers == 2
+    assert "A worker has been removed." in widget.info.value
+
+
+def test_daemon_remove_last_worker_is_refused(daemon_widget):
+    widget, daemon = daemon_widget
+    # The button is enabled from a stale status, but the live count is 1.
+    daemon.workers = 1
+    widget.remove_worker_button.disabled = False
+    widget.remove_worker_button.click()
+    assert daemon.calls == []
+    assert "at least one worker is required" in widget.info.value
+
+
+def test_daemon_refused_command_is_shown(daemon_widget, monkeypatch):
+    widget, daemon = daemon_widget
+    # circus refuses a command while another holds its lock (here, a removed
+    # worker still shutting down) and says so in its reply, without raising.
+    refusal = {
+        "status": "error",
+        "reason": "arbiter is already running watcher_decr command",
+    }
+    monkeypatch.setattr(daemon, "decrease_workers", lambda number: refusal)
+    widget.remove_worker_button.click()
+    assert State.ERROR.color in widget.info.value
+    assert "Failed to remove a worker: arbiter is already running" in widget.info.value
+    _assert_action_buttons_enabled(widget)
+
+
+def test_daemon_refresh_skipped_while_busy(daemon_widget, monkeypatch):
+    widget, _ = daemon_widget
+    calls = []
+    monkeypatch.setattr(widget, "_do_refresh", lambda: calls.append(1))
+
+    widget._busy = True
+    widget.refresh()
+    assert calls == []
+
+    widget._busy = False
+    widget.refresh()
+    assert calls == [1]
+
+
+def test_daemon_log_loads_when_opened(daemon_widget, tmp_path):
+    widget, daemon = daemon_widget
+    log = tmp_path / "daemon.log"
+    log.write_text("worker started <ok>\n")
+    daemon.daemon_log_file = str(log)
+
+    assert widget._log_content.value == ""
+    widget._log_accordion.selected_index = 0
+    assert "worker started &lt;ok&gt;" in widget._log_content.value
+
+    # While open, the tail follows status updates.
+    log.write_text("worker stopped\n")
+    widget._update_status()
+    assert "worker stopped" in widget._log_content.value
+
+
+def test_daemon_do_refresh_real_client(aiida_profile, run_threads_synchronously):
+    # No daemon runs for the temporary test profile.
+    widget = DaemonControlWidget()
+    widget.refresh()
+    assert "Daemon is not running" in widget._status.value
+    assert widget.add_worker_button.disabled is True
