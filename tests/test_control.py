@@ -1482,6 +1482,20 @@ def test_danger_zone_schedule_and_cancel(danger_zone):
     assert widget.info.value == ""
 
 
+def test_danger_zone_can_schedule_local_software_reset(danger_zone):
+    widget, flag_file = danger_zone
+    assert widget._mode.options[0][1] == "4"
+    assert widget._mode.value == "4"
+    widget._mode.value = "4"
+    assert "~/.local only" in widget._mode_details.value
+
+    widget._confirm_text.value = "factory-reset"
+    widget._schedule_button.click()
+
+    assert flag_file.read_text() == "4"
+    assert "Reset local software" in widget._scheduled_alert.value
+
+
 def test_danger_zone_unverified_write_is_an_error(danger_zone, monkeypatch):
     widget, flag_file = danger_zone
     original_read_text = Path.read_text

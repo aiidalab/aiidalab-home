@@ -1406,7 +1406,12 @@ class ProfileControlWidget(ControlSectionWidget):
 _FACTORY_RESET_FILE = Path.home() / "AIIDALAB_FACTORY_RESET"
 
 # The reset modes of that script: (label, details).
+# NOTE: The modes are out of order for backwards compatibility.
 _RESET_MODES = {
+    "4": (
+        "Reset local software",
+        "Removes ~/.local only. Apps, AiiDA data, and profiles survive.",
+    ),
     "1": (
         "Reset installed apps and local software",
         "Removes ~/apps and ~/.local. AiiDA data and profiles survive.",
@@ -1431,7 +1436,7 @@ class DangerZoneWidget(ControlSectionWidget):
 
         self._mode = ipw.RadioButtons(
             options=[(label, mode) for mode, (label, _) in _RESET_MODES.items()],
-            value="1",
+            value="4",
             layout=ipw.Layout(width="auto"),
         )
         self._mode_details = ipw.HTML()
