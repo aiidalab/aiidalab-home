@@ -21,7 +21,7 @@ def load_start_py(name):
         # Loading start.py from the app's folder
         mod = SourceFileLoader(
             "start", path.join(AIIDALAB_APPS, name, "start.py")
-        ).load_module()
+        ).load_module()  # ty: ignore[deprecated]
 
         appbase = "../" + name
         jupbase = "../../.."

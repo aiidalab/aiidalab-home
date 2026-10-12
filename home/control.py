@@ -123,7 +123,7 @@ class ControlSectionWidget(ipw.VBox):
                 self.info.value = ""
                 if self._last_updated is not None:
                     self._last_updated.value = (
-                        f"Last updated: {datetime.now().strftime('%H:%M:%S')}"  # noqa: DTZ005
+                        f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
                     )
             finally:
                 # Re-enable the button before touching anything else: if a
