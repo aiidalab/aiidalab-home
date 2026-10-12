@@ -13,7 +13,7 @@ from markdown import Markdown
 
 from home import package_reset
 from home.utils import load_widget
-from home.widgets import AppStatusInfoWidget
+from home.widgets import AppStatusInfoWidget, MigrationWidget
 
 
 def create_app_widget_move_buttons(name):
@@ -95,6 +95,10 @@ class AiidaLabHome:
             content = warning_file.read_text()
             notification = self._create_notification(content)
             children.append(notification)
+
+        migration = MigrationWidget()
+        if migration.visible:
+            children.append(migration)
 
         apps = self.load_apps()
 
