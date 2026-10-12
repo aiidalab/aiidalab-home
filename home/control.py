@@ -17,11 +17,21 @@ from urllib.parse import unquote, urlparse
 import aiida
 import ipywidgets as ipw
 import sqlalchemy as sa
+import traitlets as tl
 from aiida import get_profile, manage, orm
+from aiida.common.exceptions import NotExistent
 from aiida.engine.daemon.client import DaemonException, DaemonNotRunningException
+from aiida.engine.processes import control as process_control
 from aiida.storage.log import STORAGE_LOGGER
 from aiidalab.config import AIIDALAB_APPS
+from plumpy import ProcessState
 
+from home.process import (
+    HEADER_PK,
+    HEADER_PROCESS_LABEL,
+    HEADER_STATE,
+    ProcessListWidget,
+)
 from home.themes import ThemeDefault as Theme
 
 logger = logging.getLogger(__name__)
@@ -1052,11 +1062,195 @@ class StorageWidget(ControlSectionWidget):
         return _state_span(State.OK, summary) + "<br>" + "<br>".join(lines)
 
 
+_PROCESS_ACTION_TIMEOUT = 5.0  # seconds to wait for the processes to respond
+
+
 class ProcessControlWidget(ControlSectionWidget):
     description = "Inspect, pause, resume or kill AiiDA processes."
 
     def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+        self._busy = False
+        self._kill_armed = False
+        self._daemon = manage.get_manager().get_daemon_client()
+
+        self._state_filter = ipw.SelectMultiple(
+            options=[state.value for state in ProcessState],
+            value=("running", "waiting"),
+            rows=len(ProcessState),
+            description="Process state:",
+            style={"description_width": "initial"},
+        )
+        self._past_days = ipw.IntText(value=7, description="Past days:")
+        self._all_days = ipw.Checkbox(value=True, description="All days")
+        self.process_list = ProcessListWidget(
+            path_to_root="../",
+            process_states=list(self._state_filter.value),
+            past_days=-1,
+        )
+        tl.dlink(
+            (self._state_filter, "value"),
+            (self.process_list, "process_states"),
+            transform=list,
+        )
+        # Both controls feed `past_days` one way: linking the day count back
+        # would let "All days" overwrite it with -1.
+        tl.dlink((self._all_days, "value"), (self._past_days, "disabled"))
+        self._past_days.observe(self._update_past_days, names="value")
+        self._all_days.observe(self._update_past_days, names="value")
+
+        self._selection = ipw.SelectMultiple(
+            description="Act on:",
+            rows=8,
+            layout=ipw.Layout(width="600px"),
+            style={"description_width": "initial"},
+        )
+        self._selection.observe(self._on_selection_change, names="value")
+        self.process_list.observe(self._on_list_updated, names="updated")
+
+        self.pause_button = ipw.Button(description="Pause", icon="pause", disabled=True)
+        self.pause_button.on_click(self._on_pause)
+        self.play_button = ipw.Button(description="Play", icon="play", disabled=True)
+        self.play_button.on_click(self._on_play)
+        self.kill_button = ipw.Button(
+            description="Kill", icon="times", button_style="danger", disabled=True
+        )
+        self.kill_button.on_click(self._on_kill)
+        self._action_status = ipw.HTML()
+
+        super().__init__(
+            [
+                ipw.HBox(
+                    [self._state_filter, ipw.VBox([self._past_days, self._all_days])]
+                ),
+                self.process_list,
+                ipw.HTML("<h4>Actions</h4>"),
+                self._selection,
+                ipw.HBox([self.pause_button, self.play_button, self.kill_button]),
+                self._action_status,
+            ]
+        )
+
+    def _do_refresh(self):
+        self.process_list.update()
+
+    def _update_past_days(self, _=None):
+        self.process_list.past_days = (
+            -1 if self._all_days.value else self._past_days.value
+        )
+
+    def _on_list_updated(self, _=None):
+        self._rebuild_options()
+        self._disarm_kill()
+        self._sync_buttons()
+
+    def _rebuild_options(self):
+        """List the displayed processes, keeping the selected ones selected."""
+        previous_selection = set(self._selection.value)
+        options = []
+        for row in self.process_list.current_rows:
+            pk = int(row[HEADER_PK])
+            label = f"{pk} | {row[HEADER_PROCESS_LABEL]} | {row[HEADER_STATE]}"
+            options.append((label, pk))
+        self._selection.options = options
+        self._selection.value = tuple(
+            pk for _, pk in options if pk in previous_selection
+        )
+
+    def _on_selection_change(self, _=None):
+        self._disarm_kill()
+        self._sync_buttons()
+
+    def _sync_buttons(self):
+        disabled = self._busy or not self._selection.value
+        for button in (self.pause_button, self.play_button, self.kill_button):
+            button.disabled = disabled
+
+    def _disarm_kill(self):
+        self._kill_armed = False
+        self.kill_button.description = "Kill"
+
+    def _on_pause(self, _=None):
+        self._disarm_kill()
+        self._run_action("pause", process_control.pause_processes)
+
+    def _on_play(self, _=None):
+        self._disarm_kill()
+        self._run_action("play", process_control.play_processes)
+
+    def _on_kill(self, _=None):
+        if not self._kill_armed:
+            self._kill_armed = True
+            self.kill_button.description = (
+                f"Confirm kill ({len(self._selection.value)})"
+            )
+            return
+        self._disarm_kill()
+        self._run_action("kill", process_control.kill_processes)
+
+    def _run_action(self, verb, control_function):
+        pks = list(self._selection.value)
+        if self._busy or not pks:
+            return
+        if not self._daemon.is_daemon_running:
+            self._action_status.value = _state_span(
+                State.WARNING,
+                "Process actions need a running daemon: start it in the Daemon tab.",
+            )
+            return
+
+        self._busy = True
+        self._sync_buttons()
+        self._action_status.value = (
+            f"Sending the {verb} request... <i class='fa fa-spinner fa-spin'></i>"
+        )
+
+        def worker():
+            try:
+                self._action_status.value = self._act(verb, control_function, pks)
+            except Exception as exc:
+                self._action_status.value = _state_span(
+                    State.ERROR, f"Failed to {verb} the process(es): {exc}"
+                )
+            finally:
+                # Re-enable the buttons before updating the list, so that a
+                # failing update cannot leave them disabled.
+                self._busy = False
+                self._sync_buttons()
+                self.process_list.update()
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    @staticmethod
+    def _act(verb, control_function, pks):
+        """Send the request to the processes and return the report as HTML."""
+        # Load the nodes in this thread: AiiDA ORM objects must not be shared
+        # between threads.
+        nodes, errors = [], []
+        for pk in pks:
+            try:
+                nodes.append(orm.load_node(pk))
+            except NotExistent as exc:
+                errors.append(f"PK {pk}: {exc}")
+
+        # The outcome for each process (e.g. already terminated, unreachable,
+        # timed out) is only logged, so capture the log to show it.
+        handler = _ListLogHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+        process_control.LOGGER.addHandler(handler)
+        try:
+            if nodes:
+                control_function(nodes, timeout=_PROCESS_ACTION_TIMEOUT)
+        finally:
+            process_control.LOGGER.removeHandler(handler)
+
+        summary = (
+            f"{verb.capitalize()} requested for {len(nodes)} process(es). "
+            "Their states may take a few seconds to change."
+        )
+        report = "<br>".join(html.escape(line) for line in (summary, *handler.lines))
+        if errors:
+            report += "<br>" + _state_span(State.ERROR, "; ".join(errors))
+        return report
 
 
 class ProfileControlWidget(ControlSectionWidget):
