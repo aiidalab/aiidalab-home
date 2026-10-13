@@ -9,6 +9,13 @@
   border: 1px solid red;
 }
 
+.migration-banner {
+  background-color: antiquewhite;
+  margin: 2px;
+  padding: 8px;
+  border: 1px solid red;
+}
+
 .app-container {
   font-family: Arial, sans-serif;
   margin: 0;
@@ -54,11 +61,26 @@
   -moz-border-radius: 8px;
   -ms-border-radius: 8px;
   -o-border-radius: 8px;
-  transition: color 0.2s, background-color 0.2s, box-shadow 0.2s;
-  -webkit-transition: color 0.2s, background-color 0.2s, box-shadow 0.2s;
-  -moz-transition: color 0.2s, background-color 0.2s, box-shadow 0.2s;
-  -ms-transition: color 0.2s, background-color 0.2s, box-shadow 0.2s;
-  -o-transition: color 0.2s, background-color 0.2s, box-shadow 0.2s;
+  transition:
+    color 0.2s,
+    background-color 0.2s,
+    box-shadow 0.2s;
+  -webkit-transition:
+    color 0.2s,
+    background-color 0.2s,
+    box-shadow 0.2s;
+  -moz-transition:
+    color 0.2s,
+    background-color 0.2s,
+    box-shadow 0.2s;
+  -ms-transition:
+    color 0.2s,
+    background-color 0.2s,
+    box-shadow 0.2s;
+  -o-transition:
+    color 0.2s,
+    background-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .feature:hover {

@@ -1,5 +1,7 @@
 """AiiDAlab basic widgets."""
 
+import html
+from pathlib import Path
 from threading import Timer
 
 import ipywidgets as ipw
@@ -187,3 +189,105 @@ class LogOutputWidget(ipw.VBox):
             self._output.value = (
                 self.template.format(text=self.value) if self.value else ""
             )
+
+
+class MigrationWidget(ipw.VBox):
+    """Guide users through the Python 3.9 to 3.12 environment migration."""
+
+    def __init__(self, marker_path=None, flag_path=None):
+        self.marker_path = marker_path or (Path.home() / ".local" / "lib" / "python3.9")
+        self.flag_path = flag_path or Path.home() / ".PENDING_MIGRATION_FLAG"
+        self.status = ipw.HTML()
+
+        if self.marker_path.exists() and not self.flag_path.exists():
+            try:
+                self.flag_path.touch()
+            except OSError as exc:
+                self.status.value = (
+                    f"Could not save the migration reminder: {html.escape(str(exc))}"
+                )
+
+        self.visible = self.marker_path.exists() or self.flag_path.exists()
+
+        instructions = ipw.HTML(
+            "<h2 style='text-align: center'>⚠️ LEGACY ENVIRONMENT DETECTED ⚠️</h2>"
+            "<p>The following steps must be completed prior to using the apps:</p>"
+            "<ul>"
+            "<li>From <b>Control &gt; Danger zone</b>, schedule <b>Reset local software</b>.</li>"
+            "<li>Restart the container and return to the home page.</li>"
+            "<li>If the AiiDAlab widgets base (AWB) app is installed, remove its folder (in ~/apps) from terminal.</li>"
+            "<li>Open each installed app's <b>Manage App</b> page and click <b>Reinstall</b>.</li>"
+            "<li>Restart the daemon from <b>Control &gt; Daemon</b>.</li>"
+            "<li>If an app has no compatible version, contact its developers to request a compatible release.</li>"
+            "<li>Refer any other migration issues to the relevant app developers.</li>"
+            "</ul>"
+            "<p>Tick the following tasks upon completion:</p>"
+        )
+
+        self.steps = [
+            ipw.Checkbox(
+                description="Reset local software and restarted container",
+                indent=False,
+            ),
+            ipw.Checkbox(
+                description="Removed AWB if installed",
+                indent=False,
+            ),
+            ipw.Checkbox(
+                description="Reinstalled apps",
+                indent=False,
+            ),
+            ipw.Checkbox(
+                description="Restarted daemon",
+                indent=False,
+            ),
+        ]
+        for step in self.steps:
+            step.observe(self._update_confirmation_state, names="value")
+
+        self.confirm_button = ipw.Button(
+            description="Confirm migration completion",
+            button_style="success",
+            layout={"width": "fit-content"},
+            icon="check",
+            disabled=True,
+        )
+        self.confirm_button.on_click(self._confirm_migration)
+
+        super().__init__(
+            children=[
+                instructions,
+                *self.steps,
+                self.confirm_button,
+                self.status,
+            ]
+        )
+        self.add_class("migration-banner")
+        self.layout.border = "1px solid #d8a426"
+        self.layout.padding = "12px"
+        if not self.visible:
+            self.layout.display = "none"
+
+    def _update_confirmation_state(self, _=None):
+        self.confirm_button.disabled = not all(step.value for step in self.steps)
+
+    def _confirm_migration(self, _=None):
+        if self.marker_path.exists():
+            self.status.value = """
+                <div class='alert alert-danger' style='margin: 0.5rem 0 0' role='alert'>
+                    The Python 3.9 user-site directory still exists.
+                    The migration reminder has not been cleared.
+                </div>
+            """
+            return
+
+        try:
+            self.flag_path.unlink(missing_ok=True)
+        except OSError as exc:
+            self.status.value = (
+                f"Could not clear the migration reminder: {html.escape(str(exc))}"
+            )
+            return
+
+        self.status.value = "Migration confirmed."
+        self.layout.display = "none"
