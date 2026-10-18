@@ -342,9 +342,7 @@ class AppManagerWidget(ipw.VBox):
             blocked_install = (
                 detached and not self.blocked_ignore.value
             ) or not compatible
-            blocked_uninstall = (
-                detached or not registered or cannot_reach_registry
-            ) and not self.blocked_ignore.value
+            blocked_uninstall = detached and not self.blocked_ignore.value
 
             # Check the compatibility of current installed version and show banner if not compatible.
             if not busy and installed and not self.app.compatible:
