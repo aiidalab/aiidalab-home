@@ -6,24 +6,40 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import threading
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Protocol
+from urllib.parse import unquote, urlparse
 
 import aiida
 import ipywidgets as ipw
+import sqlalchemy as sa
+import traitlets as tl
 from aiida import get_profile, manage, orm
-from aiida.engine.daemon.client import DaemonException
+from aiida.common.exceptions import NotExistent
+from aiida.engine.daemon.client import DaemonException, DaemonNotRunningException
+from aiida.engine.processes import control as process_control
+from aiida.manage.configuration import load_config
+from aiida.storage.log import STORAGE_LOGGER
+from aiidalab.config import AIIDALAB_APPS
+from plumpy import ProcessState
 
+from home.process import (
+    HEADER_PK,
+    HEADER_PROCESS_LABEL,
+    HEADER_STATE,
+    ProcessListWidget,
+)
 from home.themes import ThemeDefault as Theme
 
 logger = logging.getLogger(__name__)
 
 
 class _DaemonClient(Protocol):
-    """The subset of `DaemonClient` that `_probe_daemon` relies on."""
+    """The subset of `DaemonClient` that the control sections rely on."""
 
     @property
     def is_daemon_running(self) -> bool: ...
@@ -143,11 +159,320 @@ class ControlSectionWidget(ipw.VBox):
         """
 
 
+def _probe_daemon_workers(client) -> tuple[State, str, dict | None]:
+    """Probe the daemon and return a (state, text, workers) tuple.
+
+    `workers` maps worker PIDs to their circus stats, or is None if the
+    daemon is not running.
+    """
+    try:
+        # get_worker_info() blocks for the client timeout when the daemon is
+        # down, so only call it after confirming that the daemon is running.
+        if not client.is_daemon_running:
+            return State.WARNING, "Daemon is not running", None
+        workers = client.get_worker_info().get("info", {})
+    except DaemonNotRunningException:
+        # The daemon stopped between the check and the call.
+        return State.WARNING, "Daemon is not running", None
+    except Exception as exc:
+        return State.ERROR, str(exc), None
+    if not workers:
+        # Nothing picks jobs off the queue, as if the daemon were not running.
+        return State.WARNING, "Daemon is running with 0 workers", workers
+    return State.OK, f"Daemon is running with {len(workers)} worker(s)", workers
+
+
+def _humanize_age(seconds) -> str:
+    """Humanize a duration in seconds, e.g. 100905.8 -> '1d 4h'."""
+    try:
+        seconds = int(seconds)
+    except (TypeError, ValueError, OverflowError):
+        return "?"
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    days, hours = divmod(hours, 24)
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes:02d}m"
+    if minutes:
+        return f"{minutes}m"
+    return f"{seconds}s"
+
+
+def _format_percent(value) -> str:
+    # circus reports "N/A" for values it could not read.
+    return f"{value:.1f}%" if isinstance(value, (int, float)) else "?"
+
+
+def _worker_table_html(workers) -> str:
+    """Table of per-worker circus stats, or '' if there are no workers."""
+    if not workers:
+        return ""
+    headers = ("Worker", "PID", "CPU", "Memory", "RSS", "Uptime")
+    rows = [
+        "".join(
+            f"<th style='padding:1px 8px;text-align:left;'>{header}</th>"
+            for header in headers
+        )
+    ]
+    for pid, stats in workers.items():
+        if not isinstance(stats, dict):
+            # circus reports a message instead of stats for a worker that
+            # has just stopped.
+            stats = {}
+        cells = (
+            stats.get("wid", "?"),
+            pid,
+            _format_percent(stats.get("cpu")),
+            _format_percent(stats.get("mem")),
+            stats.get("mem_info1", "?"),
+            _humanize_age(stats.get("age")),
+        )
+        rows.append(
+            "".join(
+                f"<td style='padding:1px 8px;'>{html.escape(str(cell))}</td>"
+                for cell in cells
+            )
+        )
+    return (
+        "<table style='border-collapse:collapse;'>"
+        + "".join(f"<tr>{row}</tr>" for row in rows)
+        + "</table>"
+    )
+
+
+_LOG_TAIL_BYTES = 64 * 1024
+
+
+def _read_log_tail(path, lines) -> str:
+    """The last `lines` lines of the file at `path`.
+
+    Reads at most the last 64 KiB, so a large log is never loaded whole.
+    """
+    try:
+        with Path(path).open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            handle.seek(max(0, handle.tell() - _LOG_TAIL_BYTES))
+            data = handle.read()
+    except FileNotFoundError:
+        return "Log file not found"
+    if not data:
+        return "(log is empty)"
+    return "\n".join(data.decode(errors="replace").splitlines()[-lines:])
+
+
 class DaemonControlWidget(ControlSectionWidget):
     description = "The daemon runs your AiiDA processes in the background."
+    _LOG_TAIL_LINES = 50
 
     def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+        self._busy = False
+        self._daemon = manage.get_manager().get_daemon_client()
+        self._status = ipw.HTML()
+        self._worker_table = ipw.HTML()
+
+        self.start_button = ipw.Button(
+            description="Start daemon", button_style="info", icon="play"
+        )
+        self.start_button.on_click(self._on_start)
+        self.stop_button = ipw.Button(
+            description="Stop daemon", button_style="danger", icon="stop"
+        )
+        self.stop_button.on_click(self._on_stop)
+        self.restart_button = ipw.Button(
+            description="Restart daemon", button_style="warning", icon="repeat"
+        )
+        self.restart_button.on_click(self._on_restart)
+        self.add_worker_button = ipw.Button(description="Add worker", icon="plus")
+        self.add_worker_button.on_click(self._on_add_worker)
+        self.remove_worker_button = ipw.Button(
+            description="Remove worker", icon="minus"
+        )
+        self.remove_worker_button.on_click(self._on_remove_worker)
+
+        self._log_content = ipw.HTML()
+        reload_log_button = ipw.Button(description="Reload log", icon="refresh")
+        reload_log_button.on_click(self._reload_log)
+        self._log_accordion = ipw.Accordion(
+            children=[ipw.VBox([self._log_content, reload_log_button])],
+            titles=[f"Daemon log ({Path(self._daemon.daemon_log_file).name})"],
+            selected_index=None,
+        )
+        self._log_accordion.observe(self._reload_log_if_open, names="selected_index")
+
+        buttons = [
+            self.start_button,
+            self.stop_button,
+            self.restart_button,
+            self.add_worker_button,
+            self.remove_worker_button,
+        ]
+        super().__init__(
+            [self._status, self._worker_table, ipw.HBox(buttons), self._log_accordion]
+        )
+        # super().__init__() creates the refresh button; it is disabled during
+        # actions too, so that a refresh cannot run alongside one.
+        self._action_buttons = list(buttons)
+        if self.refresh_button is not None:
+            self._action_buttons.append(self.refresh_button)
+
+    def _on_start(self, _=None):
+        if self._daemon.is_daemon_running:
+            self.show_warning("The daemon is already running.")
+            return
+        self._run_action(
+            "start the daemon",
+            self._start,
+            "Starting the daemon...",
+            "The daemon has been started.",
+        )
+
+    def _on_stop(self, _=None):
+        if not self._daemon.is_daemon_running:
+            self.show_warning("The daemon is not running.")
+            return
+        self._run_action(
+            "stop the daemon",
+            self._daemon.stop_daemon,
+            "Stopping the daemon...",
+            "The daemon has been stopped.",
+        )
+
+    def _on_restart(self, _=None):
+        self._run_action(
+            "restart the daemon",
+            self._restart_or_start,
+            "Restarting the daemon...",
+            "The daemon has been restarted.",
+        )
+
+    def _on_add_worker(self, _=None):
+        if not self._daemon.is_daemon_running:
+            self.show_warning("The daemon is not running.")
+            return
+        self._run_action(
+            "add a worker",
+            lambda: self._daemon.increase_workers(1),
+            "Adding a worker...",
+            "A worker has been added.",
+        )
+
+    def _on_remove_worker(self, _=None):
+        if not self._daemon.is_daemon_running:
+            self.show_warning("The daemon is not running.")
+            return
+        self._run_action(
+            "remove a worker",
+            self._remove_worker,
+            "Removing a worker...",
+            "A worker has been removed.",
+        )
+
+    def _start(self):
+        # Like `verdi daemon start`, start the configured number of workers.
+        self._daemon.start_daemon(
+            number_workers=manage.get_config_option("daemon.default_workers")
+        )
+
+    def _restart_or_start(self):
+        try:
+            return self._daemon.restart_daemon()
+        except DaemonNotRunningException:
+            self._start()
+
+    def _remove_worker(self):
+        # The button state can be stale, so re-check the live worker count.
+        if self._daemon.get_number_of_workers() <= 1:
+            raise RuntimeError("at least one worker is required")
+        return self._daemon.decrease_workers(1)
+
+    def _run_action(self, action_name, action, in_progress_message, success_message):
+        if self._busy:
+            return
+        self._busy = True
+        for button in self._action_buttons:
+            button.disabled = True
+        self.info.value = f"{in_progress_message} <i class='fa fa-spinner fa-spin'></i>"
+
+        def worker():
+            try:
+                response = action()
+                # circus refuses a command that clashes with one still running
+                # (e.g. a removed worker still shutting down) in its reply
+                # instead of raising.
+                if response and response.get("status") == "error":
+                    raise RuntimeError(response["reason"])
+            except Exception as exc:
+                self.show_error(f"Failed to {action_name}: {exc}")
+            else:
+                self.show_success(success_message)
+            finally:
+                # Re-enable the buttons before re-probing the status, so that
+                # a failing probe cannot leave them all disabled.
+                self._busy = False
+                for button in self._action_buttons:
+                    button.disabled = False
+                try:
+                    self._update_status()
+                except Exception as exc:
+                    self.info.value += "<br>" + _state_span(
+                        State.ERROR, f"Failed to refresh the status: {exc}"
+                    )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def refresh(self, _=None):
+        # A refresh during an action (e.g. when the tab is revisited) would
+        # re-enable buttons; the action re-probes the status when it is done.
+        if not self._busy:
+            super().refresh()
+
+    def _do_refresh(self):
+        self._update_status()
+
+    def _update_status(self):
+        state, text, workers = _probe_daemon_workers(self._daemon)
+        status = _state_span(state, text)
+        cpus = os.cpu_count() or 1
+        if workers and len(workers) > cpus:
+            status += " " + _state_span(
+                State.WARNING, f"(more workers than the {cpus} available CPUs)"
+            )
+        self._status.value = status
+        self._worker_table.value = _worker_table_html(workers)
+
+        running = workers is not None
+        self.add_worker_button.disabled = not running
+        self.add_worker_button.tooltip = "" if running else "The daemon is not running"
+        if not running:
+            self.remove_worker_button.disabled = True
+            self.remove_worker_button.tooltip = "The daemon is not running"
+        elif len(workers) <= 1:
+            self.remove_worker_button.disabled = True
+            self.remove_worker_button.tooltip = "At least one worker is required"
+        else:
+            self.remove_worker_button.disabled = False
+            self.remove_worker_button.tooltip = ""
+
+        self._reload_log_if_open()
+
+    def _reload_log_if_open(self, _=None):
+        if self._log_accordion.selected_index is not None:
+            self._reload_log()
+
+    def _reload_log(self, _=None):
+        try:
+            tail = _read_log_tail(self._daemon.daemon_log_file, self._LOG_TAIL_LINES)
+        except Exception as exc:
+            self._log_content.value = _state_span(
+                State.ERROR, f"Failed to read the log: {exc}"
+            )
+        else:
+            self._log_content.value = (
+                "<pre style='max-height:300px;overflow:auto;font-size:12px;'>"
+                f"{html.escape(tail)}</pre>"
+            )
 
 
 def _storage_summary(profile) -> str | None:
@@ -497,29 +822,731 @@ class SystemResourcesWidget(ControlSectionWidget):
             self._set_row_error(self._disk_bar, self._disk_label, exc)
 
 
+def _repository_path(profile) -> Path:
+    """Directory holding the profile's file repository.
+
+    For core.sqlite_dos this directory also holds the database file.
+    """
+    backend = profile.storage_backend
+    if backend == "core.psql_dos":
+        # Written by AiiDA with Path.as_uri(), i.e. percent-encoded.
+        uri = profile.storage_config["repository_uri"]
+        return Path(unquote(urlparse(uri).path))
+    if backend == "core.sqlite_dos":
+        return Path(profile.storage_config["filepath"])
+    raise ValueError(f"not available for backend {backend}")
+
+
+_DU_TIMEOUT = 120  # seconds
+
+
+def _du_bytes(path) -> int:
+    """Disk space used by `path` in bytes, computed with `du`.
+
+    Counts allocated blocks, not apparent size: packing frees whole blocks while the
+    apparent size stays put or even grows, so only blocks show what maintenance frees.
+
+    `du` is much faster than walking the tree in Python on a disk-objectstore
+    repository, which can hold very many small files. It exits nonzero when
+    a file vanishes mid-scan (e.g. during maintenance), so its numeric output
+    is trusted regardless of the exit code.
+    """
+    if not Path(path).exists():
+        raise FileNotFoundError(f"{path} does not exist")
+    result = subprocess.run(
+        ["du", "-s", "--block-size=1", str(path)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=_DU_TIMEOUT,
+    )
+    try:
+        return int(result.stdout.split()[0])
+    except (IndexError, ValueError) as exc:
+        raise RuntimeError(f"could not determine the size of {path}") from exc
+
+
+def _repository_size_or_none(profile) -> int | None:
+    """Best-effort repository size, for reporting the space maintenance reclaimed."""
+    try:
+        return _du_bytes(_repository_path(profile))
+    except Exception:
+        return None
+
+
+def _database_size_bytes(storage) -> int:
+    """Size of the PostgreSQL database in bytes (core.psql_dos only)."""
+    # Deliberately not closed: this is AiiDA's own thread-local session.
+    session = storage.get_session()
+    query = sa.text("SELECT pg_database_size(current_database())")
+    return session.execute(query).scalar_one()
+
+
+class _ListLogHandler(logging.Handler):
+    """Collects log messages, so they can be shown to the user."""
+
+    def __init__(self):
+        super().__init__()
+        self.lines: list[str] = []
+
+    def emit(self, record):
+        self.lines.append(self.format(record))
+
+
 class StorageWidget(ControlSectionWidget):
     description = "Disk usage of profile data and apps; storage maintenance."
 
     def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+        self._maintaining = False
+        self._daemon: _DaemonClient = manage.get_manager().get_daemon_client()
+        self._table = ipw.HTML()
+
+        self._dry_run_checkbox = ipw.Checkbox(
+            value=True,
+            description="Dry run (only report what would be done)",
+            indent=False,
+            layout=ipw.Layout(width="auto"),
+        )
+        self._full_checkbox = ipw.Checkbox(
+            value=False,
+            description=(
+                "Full maintenance (needs exclusive access: "
+                "stop the daemon and close other AiiDAlab apps)"
+            ),
+            indent=False,
+            layout=ipw.Layout(width="auto"),
+        )
+        self._maintain_button = ipw.Button(
+            description="Run maintenance", button_style="warning", icon="wrench"
+        )
+        self._maintain_button.on_click(self._on_maintain_clicked)
+        self._maintain_output = ipw.HTML()
+
+        super().__init__(
+            [
+                self._table,
+                ipw.HTML("<h4>Maintenance</h4>"),
+                self._dry_run_checkbox,
+                self._full_checkbox,
+                self._maintain_button,
+                self._maintain_output,
+            ]
+        )
+
+    @staticmethod
+    def _row(label, usage, *args):
+        """Table row showing `usage(*args)`, or its error if it raises."""
+        try:
+            text, color = usage(*args), "inherit"
+        except Exception as exc:
+            text, color = str(exc), State.ERROR.color
+        return (
+            "<tr>"
+            f"<td style='padding:1px 8px;'><b>{html.escape(label)}</b></td>"
+            f"<td style='color:{color};padding:1px 8px;'>{html.escape(text)}</td>"
+            "</tr>"
+        )
+
+    @staticmethod
+    def _repository_usage(profile):
+        path = _repository_path(profile)
+        return f"{_format_bytes(_du_bytes(path))} — {path}"
+
+    @staticmethod
+    def _database_usage(profile):
+        backend = profile.storage_backend
+        if backend == "core.sqlite_dos":
+            return "included in the file repository"
+        if backend == "core.psql_dos":
+            storage = manage.get_manager().get_profile_storage()
+            return _format_bytes(_database_size_bytes(storage))
+        raise ValueError(f"not available for backend {backend}")
+
+    @staticmethod
+    def _apps_usage():
+        return f"{_format_bytes(_du_bytes(AIIDALAB_APPS))} — {AIIDALAB_APPS}"
+
+    @staticmethod
+    def _home_usage():
+        used, total = _disk_status()
+        return f"{_format_bytes(used)} used of {_format_bytes(total)} — {Path.home()}"
+
+    def _do_refresh(self):
+        profile = get_profile()
+        if profile is None:
+            raise RuntimeError("no AiiDA profile is loaded")
+        rows = (
+            self._row("Profile", lambda: profile.name),
+            self._row("File repository", self._repository_usage, profile),
+            self._row("Database", self._database_usage, profile),
+            self._row("Installed apps", self._apps_usage),
+            self._row("Home filesystem", self._home_usage),
+        )
+        self._table.value = (
+            "<table style='border-collapse:collapse;'>" + "".join(rows) + "</table>"
+        )
+
+    def refresh(self, _=None):
+        # Don't measure the repository while maintenance rewrites it (e.g. when
+        # the tab is revisited); the maintenance run refreshes when it is done.
+        if not self._maintaining:
+            super().refresh()
+
+    def _set_controls_disabled(self, disabled):
+        self._dry_run_checkbox.disabled = disabled
+        self._full_checkbox.disabled = disabled
+        self._maintain_button.disabled = disabled
+        if self.refresh_button is not None:
+            self.refresh_button.disabled = disabled
+
+    def _on_maintain_clicked(self, _=None):
+        if self._maintaining:
+            return
+        self._maintaining = True
+        self._set_controls_disabled(True)
+        self._maintain_output.value = (
+            "Running maintenance... <i class='fa fa-spinner fa-spin'></i>"
+        )
+        full = self._full_checkbox.value
+        dry_run = self._dry_run_checkbox.value
+
+        def worker():
+            try:
+                self._maintain_output.value = self._maintain(full, dry_run)
+            except Exception as exc:
+                self._maintain_output.value = _state_span(
+                    State.ERROR, f"Maintenance failed: {exc}"
+                )
+            finally:
+                # Re-enable the controls before refreshing the table, so that
+                # a failing refresh cannot leave them disabled.
+                self._maintaining = False
+                self._set_controls_disabled(False)
+                if not dry_run:
+                    self.refresh()
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _maintain(self, full, dry_run):
+        """Run the storage maintenance and return the report as HTML."""
+        # A friendly pre-check: full maintenance locks the profile, which
+        # fails anyway while the daemon is using it.
+        if full and self._daemon.is_daemon_running:
+            return _state_span(
+                State.WARNING,
+                "Full maintenance needs exclusive access to the profile. "
+                "Stop the daemon first (Daemon tab) and close other AiiDAlab apps.",
+            )
+
+        profile = get_profile()
+        storage = manage.get_manager().get_profile_storage()
+        before = None if dry_run else _repository_size_or_none(profile)
+
+        # Maintenance reports its progress at INFO level, below AiiDA's default.
+        handler = _ListLogHandler()
+        previous_level = STORAGE_LOGGER.level
+        STORAGE_LOGGER.setLevel(logging.INFO)
+        STORAGE_LOGGER.addHandler(handler)
+        try:
+            storage.maintain(full=full, dry_run=dry_run)
+        finally:
+            STORAGE_LOGGER.removeHandler(handler)
+            STORAGE_LOGGER.setLevel(previous_level)
+
+        lines = [html.escape(line) for line in handler.lines] or ["(no log output)"]
+        if before is not None:
+            after = _repository_size_or_none(profile)
+            if after is not None:
+                reclaimed = _format_bytes(max(before - after, 0))
+                lines.append(f"<b>Reclaimed {reclaimed} of repository space.</b>")
+        summary = "Dry run finished." if dry_run else "Maintenance finished."
+        return _state_span(State.OK, summary) + "<br>" + "<br>".join(lines)
+
+
+_PROCESS_ACTION_TIMEOUT = 5.0  # seconds to wait for the processes to respond
 
 
 class ProcessControlWidget(ControlSectionWidget):
     description = "Inspect, pause, resume or kill AiiDA processes."
 
     def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+        self._busy = False
+        self._kill_armed = False
+        self._daemon = manage.get_manager().get_daemon_client()
+
+        self._state_filter = ipw.SelectMultiple(
+            options=[state.value for state in ProcessState],
+            value=("running", "waiting"),
+            rows=len(ProcessState),
+            description="Process state:",
+            style={"description_width": "initial"},
+        )
+        self._past_days = ipw.IntText(value=7, description="Past days:")
+        self._all_days = ipw.Checkbox(value=True, description="All days")
+        self.process_list = ProcessListWidget(
+            path_to_root="../",
+            process_states=list(self._state_filter.value),
+            past_days=-1,
+        )
+        tl.dlink(
+            (self._state_filter, "value"),
+            (self.process_list, "process_states"),
+            transform=list,
+        )
+        # Both controls feed `past_days` one way: linking the day count back
+        # would let "All days" overwrite it with -1.
+        tl.dlink((self._all_days, "value"), (self._past_days, "disabled"))
+        self._past_days.observe(self._update_past_days, names="value")
+        self._all_days.observe(self._update_past_days, names="value")
+
+        self._selection = ipw.SelectMultiple(
+            description="Act on:",
+            rows=8,
+            layout=ipw.Layout(width="600px"),
+            style={"description_width": "initial"},
+        )
+        self._selection.observe(self._on_selection_change, names="value")
+        self.process_list.observe(self._on_list_updated, names="updated")
+
+        self.pause_button = ipw.Button(description="Pause", icon="pause", disabled=True)
+        self.pause_button.on_click(self._on_pause)
+        self.play_button = ipw.Button(description="Play", icon="play", disabled=True)
+        self.play_button.on_click(self._on_play)
+        self.kill_button = ipw.Button(
+            description="Kill", icon="times", button_style="danger", disabled=True
+        )
+        self.kill_button.on_click(self._on_kill)
+        self._action_status = ipw.HTML()
+
+        super().__init__(
+            [
+                ipw.HBox(
+                    [self._state_filter, ipw.VBox([self._past_days, self._all_days])]
+                ),
+                self.process_list,
+                ipw.HTML("<h4>Actions</h4>"),
+                self._selection,
+                ipw.HBox([self.pause_button, self.play_button, self.kill_button]),
+                self._action_status,
+            ]
+        )
+
+    def _do_refresh(self):
+        self.process_list.update()
+
+    def _update_past_days(self, _=None):
+        self.process_list.past_days = (
+            -1 if self._all_days.value else self._past_days.value
+        )
+
+    def _on_list_updated(self, _=None):
+        self._rebuild_options()
+        self._disarm_kill()
+        self._sync_buttons()
+
+    def _rebuild_options(self):
+        """List the displayed processes, keeping the selected ones selected."""
+        previous_selection = set(self._selection.value)
+        options = []
+        for row in self.process_list.current_rows:
+            pk = int(row[HEADER_PK])
+            label = f"{pk} | {row[HEADER_PROCESS_LABEL]} | {row[HEADER_STATE]}"
+            options.append((label, pk))
+        self._selection.options = options
+        self._selection.value = tuple(
+            pk for _, pk in options if pk in previous_selection
+        )
+
+    def _on_selection_change(self, _=None):
+        self._disarm_kill()
+        self._sync_buttons()
+
+    def _sync_buttons(self):
+        disabled = self._busy or not self._selection.value
+        for button in (self.pause_button, self.play_button, self.kill_button):
+            button.disabled = disabled
+
+    def _disarm_kill(self):
+        self._kill_armed = False
+        self.kill_button.description = "Kill"
+
+    def _on_pause(self, _=None):
+        self._disarm_kill()
+        self._run_action("pause", process_control.pause_processes)
+
+    def _on_play(self, _=None):
+        self._disarm_kill()
+        self._run_action("play", process_control.play_processes)
+
+    def _on_kill(self, _=None):
+        if not self._kill_armed:
+            self._kill_armed = True
+            self.kill_button.description = (
+                f"Confirm kill ({len(self._selection.value)})"
+            )
+            return
+        self._disarm_kill()
+        self._run_action("kill", process_control.kill_processes)
+
+    def _run_action(self, verb, control_function):
+        pks = list(self._selection.value)
+        if self._busy or not pks:
+            return
+        if not self._daemon.is_daemon_running:
+            self._action_status.value = _state_span(
+                State.WARNING,
+                "Process actions need a running daemon: start it in the Daemon tab.",
+            )
+            return
+
+        self._busy = True
+        self._sync_buttons()
+        self._action_status.value = (
+            f"Sending the {verb} request... <i class='fa fa-spinner fa-spin'></i>"
+        )
+
+        def worker():
+            try:
+                self._action_status.value = self._act(verb, control_function, pks)
+            except Exception as exc:
+                self._action_status.value = _state_span(
+                    State.ERROR, f"Failed to {verb} the process(es): {exc}"
+                )
+            finally:
+                # Re-enable the buttons before updating the list, so that a
+                # failing update cannot leave them disabled.
+                self._busy = False
+                self._sync_buttons()
+                self.process_list.update()
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    @staticmethod
+    def _act(verb, control_function, pks):
+        """Send the request to the processes and return the report as HTML."""
+        # Load the nodes in this thread: AiiDA ORM objects must not be shared
+        # between threads.
+        nodes, errors = [], []
+        for pk in pks:
+            try:
+                nodes.append(orm.load_node(pk))
+            except NotExistent as exc:
+                errors.append(f"PK {pk}: {exc}")
+
+        # The outcome for each process (e.g. already terminated, unreachable,
+        # timed out) is only logged, so capture the log to show it.
+        handler = _ListLogHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+        process_control.LOGGER.addHandler(handler)
+        try:
+            if nodes:
+                control_function(nodes, timeout=_PROCESS_ACTION_TIMEOUT)
+        finally:
+            process_control.LOGGER.removeHandler(handler)
+
+        summary = (
+            f"{verb.capitalize()} requested for {len(nodes)} process(es). "
+            "Their states may take a few seconds to change."
+        )
+        report = "<br>".join(html.escape(line) for line in (summary, *handler.lines))
+        if errors:
+            report += "<br>" + _state_span(State.ERROR, "; ".join(errors))
+        return report
+
+
+class ProfileRow(ipw.HBox):
+    """A profile's name with its "Make default" and "Delete" buttons."""
+
+    def __init__(self, name, is_default, is_loaded, on_make_default, on_delete):
+        label = html.escape(name)
+        if is_default:
+            label += (
+                f" <span style='background:{Theme.COLORS.CHECK};color:white;"
+                "padding:1px 8px;border-radius:9px;font-size:11px;'>default</span>"
+            )
+        if is_loaded:
+            label += f" <span style='color:{Theme.COLORS.GRAY}'>(in use)</span>"
+
+        self.make_default_button = ipw.Button(
+            description="Make default",
+            button_style="info",
+            icon="star",
+            disabled=is_default,
+            tooltip="Already the default profile" if is_default else "",
+        )
+        self.make_default_button.on_click(lambda _: on_make_default(name))
+        self.delete_button = ipw.Button(
+            description="Delete",
+            button_style="danger",
+            icon="trash",
+            disabled=is_loaded,
+            tooltip="In use by this page, so it cannot be deleted" if is_loaded else "",
+        )
+        self.delete_button.on_click(lambda _: on_delete(name))
+
+        super().__init__(
+            [
+                ipw.HTML(label, layout=ipw.Layout(width="220px")),
+                self.make_default_button,
+                self.delete_button,
+            ]
+        )
 
 
 class ProfileControlWidget(ControlSectionWidget):
     description = "Manage AiiDA profiles: default profile and deletion."
 
     def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+        self._delete_target = None
+        self._rows = ipw.VBox()
+
+        self._confirm_text = ipw.HTML()
+        self._delete_storage = ipw.Checkbox(
+            value=False,
+            description="Also delete all data of this profile "
+            "(database and file repository)",
+            indent=False,
+            layout=ipw.Layout(width="auto"),
+        )
+        confirm_button = ipw.Button(
+            description="Confirm delete", button_style="danger", icon="trash"
+        )
+        confirm_button.on_click(self._on_confirm_delete)
+        cancel_button = ipw.Button(description="Cancel", icon="times")
+        cancel_button.on_click(self._dismiss_confirmation)
+        self._confirm_box = ipw.VBox(
+            [
+                self._confirm_text,
+                self._delete_storage,
+                ipw.HBox([confirm_button, cancel_button]),
+            ],
+            layout=ipw.Layout(display="none"),
+        )
+
+        super().__init__([self._rows, self._confirm_box])
+
+    def _do_refresh(self):
+        # Always read the config from disk: AiiDA's cached config misses
+        # changes made by other processes, and storing it would drop them.
+        self._render(load_config())
+
+    def _render(self, config):
+        loaded_profile = get_profile()
+        loaded_name = loaded_profile.name if loaded_profile is not None else None
+        self._rows.children = [
+            ProfileRow(
+                profile.name,
+                is_default=profile.name == config.default_profile_name,
+                is_loaded=profile.name == loaded_name,
+                on_make_default=self._on_make_default,
+                on_delete=self._on_delete,
+            )
+            for profile in config.profiles
+        ]
+        # The profile a pending confirmation targets may be gone.
+        self._dismiss_confirmation()
+
+    def _on_make_default(self, name):
+        try:
+            config = load_config()
+            config.set_default_profile(name, overwrite=True)
+            config.store()
+        except Exception as exc:
+            self.show_error(f'Failed to make "{name}" the default profile: {exc}')
+            return
+        self.show_success(
+            f'Profile "{name}" is now the default. Reload the page to use it.'
+        )
+        self._render(config)
+
+    def _on_delete(self, name):
+        self._delete_target = name
+        self._delete_storage.value = False
+        self._confirm_text.value = (
+            f"You are about to delete profile <b>{html.escape(name)}</b>. "
+            "This cannot be undone."
+        )
+        self._confirm_box.layout.display = ""
+
+    def _dismiss_confirmation(self, _=None):
+        self._delete_target = None
+        self._confirm_box.layout.display = "none"
+
+    def _on_confirm_delete(self, _=None):
+        name = self._delete_target
+        if name is None:
+            return
+        delete_storage = self._delete_storage.value
+        self._dismiss_confirmation()
+        self.info.value = (
+            f'Deleting profile "{html.escape(name)}"... '
+            "<i class='fa fa-spinner fa-spin'></i>"
+        )
+        try:
+            config = load_config()
+            was_default = name == config.default_profile_name
+            # Pass delete_storage explicitly: AiiDA deletes the data by default.
+            config.delete_profile(name, delete_storage=delete_storage)
+        except Exception as exc:
+            self.show_error(f'Failed to delete profile "{name}": {exc}')
+            return
+
+        message = f'Profile "{name}" deleted.'
+        if was_default and config.profiles:
+            # AiiDA makes the first remaining profile the new default.
+            message += f' "{config.default_profile_name}" is now the default profile.'
+        self.show_success(message)
+        self._render(config)
+
+
+# The container's entrypoint (aiidalab-docker-stack,
+# before-notebook.d/50_factory-reset.sh) reads this file on start, performs
+# the reset mode it contains and removes it. A module constant so tests can
+# monkeypatch it: the real file erases data on the next restart.
+_FACTORY_RESET_FILE = Path.home() / "AIIDALAB_FACTORY_RESET"
+
+# The reset modes of that script: (label, details).
+# NOTE: The modes are out of order for backwards compatibility.
+_RESET_MODES = {
+    "4": (
+        "Reset local software",
+        "Removes ~/.local only. Apps, AiiDA data, and profiles survive.",
+    ),
+    "1": (
+        "Reset installed apps and local software",
+        "Removes ~/apps and ~/.local. AiiDA data and profiles survive.",
+    ),
+    "2": (
+        "Full factory reset — erase everything",
+        (
+            "Erases EVERYTHING in the home directory, including all AiiDA "
+            "data, profiles and files."
+        ),
+    ),
+}
+
+_FACTORY_RESET_CONFIRM_PHRASE = "factory-reset"
 
 
 class DangerZoneWidget(ControlSectionWidget):
     description = "Irreversible actions that can lead to data loss."
 
     def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+        self._env_warning = ipw.HTML()
+
+        self._mode = ipw.RadioButtons(
+            options=[(label, mode) for mode, (label, _) in _RESET_MODES.items()],
+            value="4",
+            layout=ipw.Layout(width="auto"),
+        )
+        self._mode_details = ipw.HTML()
+        self._mode.observe(self._show_mode_details, names="value")
+        self._show_mode_details()
+        self._confirm_text = ipw.Text()
+        self._confirm_text.observe(self._on_confirm_text_change, names="value")
+        self._schedule_button = ipw.Button(
+            description="Schedule factory reset",
+            button_style="danger",
+            icon="exclamation-triangle",
+            disabled=True,
+        )
+        self._schedule_button.on_click(self._on_schedule)
+        self._schedule_box = ipw.VBox(
+            [
+                ipw.HTML(
+                    "A factory reset is performed by the AiiDAlab container on "
+                    "its <b>next restart</b>. Choose what to reset:"
+                ),
+                self._mode,
+                self._mode_details,
+                ipw.HTML(
+                    f"To confirm, type <code>{_FACTORY_RESET_CONFIRM_PHRASE}</code>:"
+                ),
+                self._confirm_text,
+                self._schedule_button,
+            ]
+        )
+
+        self._scheduled_alert = ipw.HTML()
+        cancel_button = ipw.Button(description="Cancel scheduled reset", icon="undo")
+        cancel_button.on_click(self._on_cancel)
+        self._scheduled_box = ipw.VBox(
+            [self._scheduled_alert, cancel_button],
+            layout=ipw.Layout(display="none"),
+        )
+
+        super().__init__([self._env_warning, self._schedule_box, self._scheduled_box])
+        self.layout.border = f"1px solid {Theme.COLORS.DANGER}"
+        self.layout.padding = "12px"
+
+    def _show_mode_details(self, _=None):
+        _, details = _RESET_MODES[self._mode.value]
+        self._mode_details.value = html.escape(details)
+
+    def _on_confirm_text_change(self, change):
+        self._schedule_button.disabled = (
+            change["new"].strip() != _FACTORY_RESET_CONFIRM_PHRASE
+        )
+
+    def _on_schedule(self, _=None):
+        mode = self._mode.value
+        try:
+            _FACTORY_RESET_FILE.write_text(mode)
+            # Read it back: a reset the container won't see is worse than an
+            # error, e.g. on a home directory mounted with surprising semantics.
+            if _FACTORY_RESET_FILE.read_text() != mode:
+                raise RuntimeError("could not verify the content of the flag file")
+        except Exception as exc:
+            self.show_error(f"Failed to schedule the factory reset: {exc}")
+        else:
+            self.info.value = ""
+            self._confirm_text.value = ""
+        # Show whatever is on disk now, including a half-written flag file.
+        self._do_refresh()
+
+    def _on_cancel(self, _=None):
+        try:
+            _FACTORY_RESET_FILE.unlink(missing_ok=True)
+        except Exception as exc:
+            self.show_error(f"Failed to cancel the scheduled reset: {exc}")
+        else:
+            self.info.value = ""
+        self._do_refresh()
+
+    def _do_refresh(self):
+        # The container script lets a non-empty variable override the flag
+        # file, even "0" (which then cancels the reset scheduled here).
+        env_mode = os.environ.get("AIIDALAB_FACTORY_RESET", "")
+        self._env_warning.value = (
+            _state_span(
+                State.WARNING,
+                "The AIIDALAB_FACTORY_RESET environment variable of this "
+                f"container is set to '{env_mode}', which takes precedence "
+                "over a reset scheduled here.",
+            )
+            if env_mode
+            else ""
+        )
+
+        scheduled = _FACTORY_RESET_FILE.exists()
+        if scheduled:
+            self._scheduled_alert.value = self._scheduled_message()
+        self._schedule_box.layout.display = "none" if scheduled else ""
+        self._scheduled_box.layout.display = "" if scheduled else "none"
+
+    @staticmethod
+    def _scheduled_message():
+        try:
+            mode = _FACTORY_RESET_FILE.read_text().strip()
+        except OSError as exc:
+            what = f"the flag file could not be read: {exc}"
+        else:
+            label, details = _RESET_MODES.get(mode, (f"unknown mode '{mode}'", ""))
+            what = f"{label}. {details}" if details else label
+        return (
+            "<div class='alert alert-warning' role='alert'>"
+            f"A factory reset is scheduled: <b>{html.escape(what)}</b><br>"
+            "It is performed the next time this AiiDAlab container starts, i.e. "
+            "after your AiiDAlab server has been stopped and started again. "
+            "Until then, it can be cancelled.</div>"
+        )
