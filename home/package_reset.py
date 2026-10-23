@@ -4,6 +4,7 @@ Kept free of heavy imports: the home page checks it before rendering anything.
 """
 
 import html
+import os
 from pathlib import Path
 
 import ipywidgets as ipw
@@ -50,12 +51,25 @@ def scheduled_message() -> str:
             if mode == _RESET_MODE
             else f"unknown mode '{mode}', which the container ignores"
         )
+    # Set by JupyterHub in the environment of the user's server.
+    hub_home = os.environ.get("JUPYTERHUB_BASE_URL", "/") + "hub/home"
     return (
         "<div class='alert alert-warning' role='alert'>"
-        f"A reset is scheduled: <b>{html.escape(what)}</b><br>"
-        "To perform it, restart your AiiDAlab container, i.e. stop your "
-        "AiiDAlab server and start it again. Until then, the home page shows "
-        "only this notice.</div>"
+        f"<div style='font-size:15px;'>A reset is scheduled: "
+        f"<b>{html.escape(what)}</b></div>"
+        "<div style='margin:4px 0 8px 0;'>Restart your AiiDAlab container to "
+        "perform it. Until then, the home page shows only this notice.</div>"
+        "<ul style='margin:0;padding-left:20px;line-height:1.8;'>"
+        "<li><b>AiiDAlab server:</b> open the "
+        f"<a class='alert-link' href='{html.escape(hub_home)}' target='_blank'>"
+        "Control Panel</a>, click <i>Stop My Server</i>, then "
+        "<i>Start My Server</i>.</li>"
+        "<li><b>Local, with aiidalab-launch:</b> run "
+        "<code>aiidalab-launch start --restart</code></li>"
+        "<li><b>Local, with Docker:</b> run "
+        "<code>docker restart &lt;container&gt;</code> "
+        "(<code>docker ps</code> lists the names)</li>"
+        "</ul></div>"
     )
 
 
