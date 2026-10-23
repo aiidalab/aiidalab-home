@@ -460,6 +460,15 @@ def _schedule_visible(widget):
     return widget._schedule_box.layout.display != "none"
 
 
+def _notice(widget):
+    (notice,) = widget._scheduled_box.children
+    return notice
+
+
+def _scheduled_alert(widget):
+    return _notice(widget).children[0].value
+
+
 def test_danger_zone_button_needs_confirmation_phrase(danger_zone):
     widget, _ = danger_zone
     assert widget._schedule_button.disabled is True
@@ -480,18 +489,20 @@ def test_danger_zone_schedule_and_cancel(danger_zone):
 
     assert flag_file.read_text() == "local"
     assert not _schedule_visible(widget)
-    assert "Reset user-installed Python packages" in widget._scheduled_alert.value
+    assert "Reset user-installed Python packages" in _scheduled_alert(widget)
     # The confirmation is cleared, so the button is disarmed again.
     assert widget._confirm_text.value == ""
     assert widget._schedule_button.disabled is True
 
-    widget._on_cancel()
+    notice = _notice(widget)
+    notice.cancel_button.click()
     assert not flag_file.exists()
     assert _schedule_visible(widget)
     assert widget.info.value == ""
 
     # Cancelling a reset that is already gone is not an error.
-    widget._on_cancel()
+    notice.cancel_button.click()
+    assert notice.error.value == ""
     assert widget.info.value == ""
 
 
@@ -512,7 +523,7 @@ def test_danger_zone_unverified_write_is_an_error(danger_zone, monkeypatch):
     assert "could not verify" in widget.info.value
     # What is on disk is shown, with a way to cancel it.
     assert not _schedule_visible(widget)
-    assert "unknown mode" in widget._scheduled_alert.value
+    assert "unknown mode" in _scheduled_alert(widget)
 
 
 @pytest.mark.parametrize("value", ["1", "2", "7"])
@@ -522,8 +533,8 @@ def test_danger_zone_unknown_mode(danger_zone, value):
     flag_file.write_text(value)
     widget._do_refresh()
     assert not _schedule_visible(widget)
-    assert f"unknown mode &#x27;{value}&#x27;" in widget._scheduled_alert.value
-    assert "ignores" in widget._scheduled_alert.value
+    assert f"unknown mode &#x27;{value}&#x27;" in _scheduled_alert(widget)
+    assert "ignores" in _scheduled_alert(widget)
 
 
 def test_danger_zone_unreadable_flag_file(danger_zone):
@@ -533,9 +544,9 @@ def test_danger_zone_unreadable_flag_file(danger_zone):
     flag_file.mkdir()
     widget._do_refresh()
     assert not _schedule_visible(widget)
-    assert "could not be read" in widget._scheduled_alert.value
+    assert "could not be read" in _scheduled_alert(widget)
 
-    widget._on_cancel()
-    assert State.ERROR.color in widget.info.value
-    assert "Failed to cancel" in widget.info.value
+    notice = _notice(widget)
+    notice.cancel_button.click()
+    assert "Failed to cancel" in notice.error.value
     assert not _schedule_visible(widget)

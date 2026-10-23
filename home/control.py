@@ -548,17 +548,7 @@ class DangerZoneWidget(ControlSectionWidget):
             ]
         )
 
-        self._scheduled_alert = ipw.HTML()
-        cancel_button = ipw.Button(
-            description="Cancel package reset",
-            icon="undo",
-            layout=ipw.Layout(width="fit-content"),
-        )
-        cancel_button.on_click(self._on_cancel)
-        self._scheduled_box = ipw.VBox(
-            [self._scheduled_alert, cancel_button],
-            layout=ipw.Layout(display="none"),
-        )
+        self._scheduled_box = ipw.VBox(layout=ipw.Layout(display="none"))
 
         super().__init__([self._schedule_box, self._scheduled_box])
         self.layout.border = f"1px solid {Theme.COLORS.DANGER}"
@@ -578,18 +568,16 @@ class DangerZoneWidget(ControlSectionWidget):
         # Show whatever is on disk now, including a half-written flag file.
         self._do_refresh()
 
-    def _on_cancel(self, _=None):
-        try:
-            package_reset.cancel()
-        except Exception as exc:
-            self.show_error(f"Failed to cancel the package reset: {exc}")
-        else:
-            self.info.value = ""
+    def _on_cancelled(self):
+        self.info.value = ""
         self._do_refresh()
 
     def _do_refresh(self):
         scheduled = package_reset.is_scheduled()
         if scheduled:
-            self._scheduled_alert.value = package_reset.scheduled_message()
+            # Rebuilt from what is on disk now.
+            self._scheduled_box.children = [
+                package_reset.PackageResetNotice(on_cancelled=self._on_cancelled)
+            ]
         self._schedule_box.layout.display = "none" if scheduled else ""
         self._scheduled_box.layout.display = "" if scheduled else "none"

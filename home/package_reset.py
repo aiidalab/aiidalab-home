@@ -6,6 +6,10 @@ Kept free of heavy imports: the home page checks it before rendering anything.
 import html
 from pathlib import Path
 
+import ipywidgets as ipw
+
+from home.themes import ThemeDefault as Theme
+
 # The container's entrypoint (aiidalab-docker-stack,
 # before-notebook.d/50_factory-reset.sh) reads this file on start, performs
 # the reset mode it contains and removes it. A module constant so tests can
@@ -52,3 +56,35 @@ def scheduled_message() -> str:
         "AiiDAlab server and start it again. Until then, the apps are not "
         "available, but the reset can be cancelled.</div>"
     )
+
+
+class PackageResetNotice(ipw.VBox):
+    """Notice of a scheduled package reset, with a way to cancel it."""
+
+    def __init__(self, on_cancelled):
+        self._on_cancelled = on_cancelled
+        self.cancel_button = ipw.Button(
+            description="Cancel package reset",
+            icon="undo",
+            layout=ipw.Layout(width="fit-content"),
+        )
+        self.cancel_button.on_click(self._on_cancel)
+        self.error = ipw.HTML()
+        super().__init__(
+            children=[
+                ipw.HTML(scheduled_message()),
+                self.cancel_button,
+                self.error,
+            ]
+        )
+
+    def _on_cancel(self, _=None):
+        try:
+            cancel()
+        except Exception as exc:
+            self.error.value = (
+                f"<span style='color: {Theme.COLORS.DANGER}'>"
+                f"Failed to cancel the package reset: {html.escape(str(exc))}</span>"
+            )
+        else:
+            self._on_cancelled()

@@ -1,7 +1,8 @@
 import ipywidgets as ipw
 import pytest
 
-from home.start_page import AiidaLabHome, PackageResetNotice
+from home.package_reset import PackageResetNotice
+from home.start_page import AiidaLabHome
 
 
 @pytest.fixture

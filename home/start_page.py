@@ -1,6 +1,5 @@
 """Module to generate AiiDAlab home page."""
 
-import html
 import json
 from glob import glob
 from os import path
@@ -13,7 +12,6 @@ from aiidalab.config import AIIDALAB_APPS
 from markdown import Markdown
 
 from home import package_reset
-from home.themes import ThemeDefault as Theme
 from home.utils import load_widget
 from home.widgets import AppStatusInfoWidget
 
@@ -79,7 +77,9 @@ class AiidaLabHome:
         """Rendering all apps, or only the notice of a scheduled package reset."""
         if package_reset.is_scheduled():
             # Nothing should be done in an environment that is about to be reset.
-            self.output.children = [PackageResetNotice(on_cancelled=self.render)]
+            self.output.children = [
+                package_reset.PackageResetNotice(on_cancelled=self.render)
+            ]
         else:
             self.output.children = self._create_app_children()
         return self.output
@@ -140,38 +140,6 @@ class AiidaLabHome:
         notification_widget = ipw.HTML(html)
         notification_widget.add_class("home-notification")
         return notification_widget
-
-
-class PackageResetNotice(ipw.VBox):
-    """Notice of a scheduled package reset, with a way to cancel it."""
-
-    def __init__(self, on_cancelled):
-        self._on_cancelled = on_cancelled
-        self.cancel_button = ipw.Button(
-            description="Cancel package reset",
-            icon="undo",
-            layout=ipw.Layout(width="fit-content"),
-        )
-        self.cancel_button.on_click(self._on_cancel)
-        self.error = ipw.HTML()
-        super().__init__(
-            children=[
-                ipw.HTML(package_reset.scheduled_message()),
-                self.cancel_button,
-                self.error,
-            ]
-        )
-
-    def _on_cancel(self, _=None):
-        try:
-            package_reset.cancel()
-        except Exception as exc:
-            self.error.value = (
-                f"<span style='color: {Theme.COLORS.DANGER}'>"
-                f"Failed to cancel the package reset: {html.escape(str(exc))}</span>"
-            )
-        else:
-            self._on_cancelled()
 
 
 class AppWidget(ipw.VBox):
