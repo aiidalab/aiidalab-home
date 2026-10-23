@@ -33,9 +33,10 @@ def test_cancel_removes_flag_file(reset_flag_file):
     package_reset.cancel()
 
 
-def test_scheduled_message_for_local_mode(reset_flag_file):
-    # The container strips whitespace, so a trailing newline is still `local`.
-    reset_flag_file.write_text("local\n")
+@pytest.mark.parametrize("content", ["local\n", " lo cal \n"])
+def test_scheduled_message_for_local_mode(reset_flag_file, content):
+    # The container removes all whitespace, so these are still `local`.
+    reset_flag_file.write_text(content)
     assert "Reset user-installed Python packages" in package_reset.scheduled_message()
 
 

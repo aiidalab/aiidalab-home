@@ -40,7 +40,8 @@ def cancel():
 def scheduled_message() -> str:
     """An alert describing the scheduled reset, from what is on disk."""
     try:
-        mode = _FACTORY_RESET_FILE.read_text().strip()
+        # Like the container, which removes all whitespace.
+        mode = "".join(_FACTORY_RESET_FILE.read_text().split())
     except OSError as exc:
         what = f"the flag file could not be read: {exc}"
     else:
