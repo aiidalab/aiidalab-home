@@ -53,8 +53,8 @@ def scheduled_message() -> str:
         "<div class='alert alert-warning' role='alert'>"
         f"A reset is scheduled: <b>{html.escape(what)}</b><br>"
         "To perform it, restart your AiiDAlab container, i.e. stop your "
-        "AiiDAlab server and start it again. Until then, the apps are not "
-        "available, but the reset can be cancelled.</div>"
+        "AiiDAlab server and start it again. Until then, the home page shows "
+        "only this notice.</div>"
     )
 
 
