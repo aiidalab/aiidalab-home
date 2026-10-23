@@ -28,12 +28,3 @@ def test_home_shows_only_reset_notice_while_scheduled(home, reset_flag_file):
     notice.cancel_button.click()
     assert not reset_flag_file.exists()
     assert [child.value for child in home.output.children] == ["apps"]
-
-
-def test_home_reset_notice_cancel_failure(home, reset_flag_file):
-    # A directory in place of the flag file exists, but can't be removed.
-    reset_flag_file.mkdir()
-    (notice,) = home.render().children
-    notice.cancel_button.click()
-    assert "Failed to cancel" in notice.error.value
-    assert home.output.children == (notice,)

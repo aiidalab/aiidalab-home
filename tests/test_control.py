@@ -453,7 +453,7 @@ def danger_zone(reset_flag_file):
     """A DangerZoneWidget whose flag file is a temporary path."""
     widget = DangerZoneWidget()
     widget._do_refresh()
-    return widget, reset_flag_file
+    return widget
 
 
 def _schedule_visible(widget):
@@ -470,7 +470,7 @@ def _scheduled_alert(widget):
 
 
 def test_danger_zone_button_needs_confirmation_phrase(danger_zone):
-    widget, _ = danger_zone
+    widget = danger_zone
     assert widget._schedule_button.disabled is True
     widget._confirm_text.value = "reset"
     assert widget._schedule_button.disabled is True
@@ -480,38 +480,34 @@ def test_danger_zone_button_needs_confirmation_phrase(danger_zone):
     assert widget._schedule_button.disabled is True
 
 
-def test_danger_zone_schedule_and_cancel(danger_zone):
-    widget, flag_file = danger_zone
+def test_danger_zone_schedule_and_cancel(danger_zone, reset_flag_file):
+    widget = danger_zone
     assert _schedule_visible(widget)
 
     widget._confirm_text.value = "reset-packages"
     widget._schedule_button.click()
 
-    assert flag_file.read_text() == "local"
+    assert reset_flag_file.read_text() == "local"
     assert not _schedule_visible(widget)
     assert "Reset user-installed Python packages" in _scheduled_alert(widget)
     # The confirmation is cleared, so the button is disarmed again.
     assert widget._confirm_text.value == ""
     assert widget._schedule_button.disabled is True
 
-    notice = _notice(widget)
-    notice.cancel_button.click()
-    assert not flag_file.exists()
+    _notice(widget).cancel_button.click()
+    assert not reset_flag_file.exists()
     assert _schedule_visible(widget)
     assert widget.info.value == ""
 
-    # Cancelling a reset that is already gone is not an error.
-    notice.cancel_button.click()
-    assert notice.error.value == ""
-    assert widget.info.value == ""
 
-
-def test_danger_zone_unverified_write_is_an_error(danger_zone, monkeypatch):
-    widget, flag_file = danger_zone
+def test_danger_zone_unverified_write_is_an_error(
+    danger_zone, reset_flag_file, monkeypatch
+):
+    widget = danger_zone
     original_read_text = Path.read_text
 
     def _read_text(self, *args, **kwargs):
-        if self == flag_file:
+        if self == reset_flag_file:
             return "garbled"
         return original_read_text(self, *args, **kwargs)
 
@@ -524,29 +520,3 @@ def test_danger_zone_unverified_write_is_an_error(danger_zone, monkeypatch):
     # What is on disk is shown, with a way to cancel it.
     assert not _schedule_visible(widget)
     assert "unknown mode" in _scheduled_alert(widget)
-
-
-@pytest.mark.parametrize("value", ["1", "2", "7"])
-def test_danger_zone_unknown_mode(danger_zone, value):
-    # E.g. a numeric mode of older containers, which the container now ignores.
-    widget, flag_file = danger_zone
-    flag_file.write_text(value)
-    widget._do_refresh()
-    assert not _schedule_visible(widget)
-    assert f"unknown mode &#x27;{value}&#x27;" in _scheduled_alert(widget)
-    assert "ignores" in _scheduled_alert(widget)
-
-
-def test_danger_zone_unreadable_flag_file(danger_zone):
-    # A directory in place of the flag file exists, but can't be read or
-    # removed.
-    widget, flag_file = danger_zone
-    flag_file.mkdir()
-    widget._do_refresh()
-    assert not _schedule_visible(widget)
-    assert "could not be read" in _scheduled_alert(widget)
-
-    notice = _notice(widget)
-    notice.cancel_button.click()
-    assert "Failed to cancel" in notice.error.value
-    assert not _schedule_visible(widget)

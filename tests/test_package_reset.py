@@ -36,3 +36,25 @@ def test_scheduled_message_for_unknown_mode(reset_flag_file, value):
 def test_scheduled_message_for_unreadable_flag_file(reset_flag_file):
     reset_flag_file.mkdir()
     assert "could not be read" in package_reset.scheduled_message()
+
+
+def test_notice_cancel(reset_flag_file):
+    reset_flag_file.write_text("local")
+    cancelled = []
+    notice = package_reset.PackageResetNotice(on_cancelled=lambda: cancelled.append(1))
+    notice.cancel_button.click()
+    assert not reset_flag_file.exists()
+    # Cancelling a reset that is already gone is not an error.
+    notice.cancel_button.click()
+    assert notice.error.value == ""
+    assert cancelled == [1, 1]
+
+
+def test_notice_cancel_failure(reset_flag_file):
+    # A directory in place of the flag file exists, but can't be removed.
+    reset_flag_file.mkdir()
+    cancelled = []
+    notice = package_reset.PackageResetNotice(on_cancelled=lambda: cancelled.append(1))
+    notice.cancel_button.click()
+    assert "Failed to cancel" in notice.error.value
+    assert cancelled == []
