@@ -66,7 +66,7 @@ def scheduled_message() -> str:
         "<i>Start My Server</i>.</li>"
         "<li><b>Local, with aiidalab-launch:</b> run "
         "<code>aiidalab-launch start --restart -p &lt;profile&gt;</code> "
-        "(<code>aiidalab-launch profile list</code> lists the names)</li>"
+        "(<code>aiidalab-launch status</code> lists the profiles)</li>"
         "<li><b>Local, with Docker:</b> run "
         "<code>docker restart &lt;container&gt;</code> "
         "(<code>docker ps</code> lists the names)</li>"
