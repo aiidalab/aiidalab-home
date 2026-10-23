@@ -1,0 +1,106 @@
+"""The package reset that the AiiDAlab container performs on its next start.
+
+Kept free of heavy imports: the home page checks it before rendering anything.
+"""
+
+import html
+import os
+from pathlib import Path
+
+import ipywidgets as ipw
+
+from home.themes import ThemeDefault as Theme
+
+# The container's entrypoint (aiidalab-docker-stack,
+# before-notebook.d/50_factory-reset.sh) reads this file on start, performs
+# the reset mode it contains and removes it. A module constant so tests can
+# monkeypatch it: the real file resets ~/.local on the next restart.
+_FACTORY_RESET_FILE = Path.home() / "AIIDALAB_FACTORY_RESET"
+
+# The only reset mode of that script; it ignores any other content.
+_RESET_MODE = "local"
+RESET_LABEL = "Reset user-installed Python packages"
+
+
+def is_scheduled() -> bool:
+    return _FACTORY_RESET_FILE.exists()
+
+
+def schedule():
+    _FACTORY_RESET_FILE.write_text(_RESET_MODE)
+    # Read it back: a reset the container won't see is worse than an
+    # error, e.g. on a home directory mounted with surprising semantics.
+    if _FACTORY_RESET_FILE.read_text() != _RESET_MODE:
+        raise RuntimeError("could not verify the content of the flag file")
+
+
+def cancel():
+    _FACTORY_RESET_FILE.unlink(missing_ok=True)
+
+
+def scheduled_message() -> str:
+    """An alert describing the scheduled reset, from what is on disk."""
+    try:
+        # Like the container, which removes all whitespace.
+        mode = "".join(_FACTORY_RESET_FILE.read_text().split())
+    except OSError as exc:
+        what = f"the flag file could not be read: {exc}"
+    else:
+        what = (
+            RESET_LABEL
+            if mode == _RESET_MODE
+            else f"unknown mode '{mode}', which the container ignores"
+        )
+    # Set by JupyterHub in the environment of the user's server.
+    hub_home = os.environ.get("JUPYTERHUB_BASE_URL", "/") + "hub/home"
+    return (
+        "<div class='alert alert-warning' role='alert'>"
+        f"<div style='font-size:15px;'>A reset is scheduled: "
+        f"<b>{html.escape(what)}</b></div>"
+        "<div style='margin:4px 0 8px 0;'>Restart your AiiDAlab container to "
+        "perform it. Until then, the home page shows only this notice.</div>"
+        "<ul style='margin:0;padding-left:20px;line-height:1.8;'>"
+        "<li><b>AiiDAlab server:</b> open the "
+        f"<a class='alert-link' href='{html.escape(hub_home)}' target='_blank'>"
+        "Control Panel</a>, click <i>Stop My Server</i>, then "
+        "<i>Start My Server</i>.</li>"
+        "<li><b>Local, with aiidalab-launch:</b> run "
+        "<code>aiidalab-launch start --restart -p &lt;profile&gt;</code> "
+        "(<code>aiidalab-launch status</code> lists the profiles)</li>"
+        "<li><b>Local, with Docker:</b> run "
+        "<code>docker restart &lt;container&gt;</code> "
+        "(<code>docker ps</code> lists the names)</li>"
+        "</ul></div>"
+    )
+
+
+class PackageResetNotice(ipw.VBox):
+    """Notice of a scheduled package reset, with a way to cancel it."""
+
+    def __init__(self, on_cancelled):
+        self._on_cancelled = on_cancelled
+        self.cancel_button = ipw.Button(
+            description="Cancel package reset",
+            icon="undo",
+            layout=ipw.Layout(width="fit-content"),
+        )
+        self.cancel_button.on_click(self._on_cancel)
+        self.error = ipw.HTML()
+        super().__init__(
+            children=[
+                ipw.HTML(scheduled_message()),
+                self.cancel_button,
+                self.error,
+            ]
+        )
+
+    def _on_cancel(self, _=None):
+        try:
+            cancel()
+        except Exception as exc:
+            self.error.value = (
+                f"<span style='color: {Theme.COLORS.DANGER}'>"
+                f"Failed to cancel the package reset: {html.escape(str(exc))}</span>"
+            )
+        else:
+            self._on_cancelled()

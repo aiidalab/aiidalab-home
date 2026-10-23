@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from pathlib import Path
 
 import pytest
 from aiida import engine, orm
@@ -6,7 +7,30 @@ from aiida.common import LinkType
 from aiida.workflows.arithmetic.multiply_add import MultiplyAddWorkChain
 from plumpy import ProcessState
 
+import home.package_reset
+
 pytest_plugins = ["aiida.manage.tests.pytest_fixtures"]
+
+# The container resets ~/.local on its next start while this file exists.
+_REAL_RESET_FLAG_FILE = Path.home() / "AIIDALAB_FACTORY_RESET"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _real_reset_flag_file_untouched():
+    """Fail the session if a test wrote the real ~/AIIDALAB_FACTORY_RESET."""
+    existed = _REAL_RESET_FLAG_FILE.exists()
+    yield
+    assert existed or not _REAL_RESET_FLAG_FILE.exists(), (
+        f"a test created {_REAL_RESET_FLAG_FILE}; remove it"
+    )
+
+
+@pytest.fixture
+def reset_flag_file(tmp_path, monkeypatch):
+    """A temporary path in place of the package reset's flag file."""
+    flag_file = tmp_path / "AIIDALAB_FACTORY_RESET"
+    monkeypatch.setattr(home.package_reset, "_FACTORY_RESET_FILE", flag_file)
+    return flag_file
 
 
 @pytest.fixture

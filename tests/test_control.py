@@ -7,9 +7,11 @@ import pytest
 from aiida.engine.daemon.client import DaemonException
 
 import home.control as control_module
+from home import package_reset
 from home.control import (
     AiidaStatusOverviewWidget,
     ControlSectionWidget,
+    DangerZoneWidget,
     State,
     SystemResourcesWidget,
     _cpu_status,
@@ -444,3 +446,77 @@ def test_system_resources_do_refresh_partial_failure(
     # ...but CPU and disk still updated independently.
     assert widget._cpu_bar.bar_style == "success"
     assert widget._disk_bar.bar_style == "success"
+
+
+@pytest.fixture
+def danger_zone(reset_flag_file):
+    """A DangerZoneWidget whose flag file is a temporary path."""
+    widget = DangerZoneWidget()
+    widget._do_refresh()
+    return widget
+
+
+def _schedule_visible(widget):
+    return widget._schedule_box.layout.display != "none"
+
+
+def _notice(widget):
+    (notice,) = widget._scheduled_box.children
+    return notice
+
+
+def _scheduled_alert(widget):
+    return _notice(widget).children[0].value
+
+
+def test_danger_zone_button_needs_confirmation_phrase(danger_zone):
+    widget = danger_zone
+    assert widget._schedule_button.disabled is True
+    widget._confirm_text.value = "reset"
+    assert widget._schedule_button.disabled is True
+    widget._confirm_text.value = "  reset-packages  "
+    assert widget._schedule_button.disabled is False
+    widget._confirm_text.value = "reset-packages!"
+    assert widget._schedule_button.disabled is True
+
+
+def test_danger_zone_schedule_and_cancel(danger_zone, reset_flag_file):
+    widget = danger_zone
+    assert _schedule_visible(widget)
+
+    widget._confirm_text.value = "reset-packages"
+    widget._schedule_button.click()
+
+    assert reset_flag_file.read_text() == "local"
+    assert not _schedule_visible(widget)
+    assert "Reset user-installed Python packages" in _scheduled_alert(widget)
+    # The confirmation is cleared, so the button is disarmed again.
+    assert widget._confirm_text.value == ""
+    assert widget._schedule_button.disabled is True
+
+    _notice(widget).cancel_button.click()
+    assert not reset_flag_file.exists()
+    assert _schedule_visible(widget)
+    assert widget.info.value == ""
+
+
+@pytest.mark.parametrize("written", [None, "garbled"])
+def test_danger_zone_schedule_failure(
+    danger_zone, reset_flag_file, monkeypatch, written
+):
+    def _schedule():
+        if written is not None:
+            reset_flag_file.write_text(written)
+        raise OSError("disk trouble")
+
+    monkeypatch.setattr(package_reset, "schedule", _schedule)
+    widget = danger_zone
+    widget._confirm_text.value = "reset-packages"
+    widget._schedule_button.click()
+
+    assert State.ERROR.color in widget.info.value
+    assert "disk trouble" in widget.info.value
+    # The confirmation is kept, so the user can retry right away.
+    assert widget._confirm_text.value == "reset-packages"
+    # What is on disk is shown: a half-written file gets the notice to cancel it.
+    assert _schedule_visible(widget) == (written is None)
