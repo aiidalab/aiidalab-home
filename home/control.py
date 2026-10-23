@@ -526,13 +526,9 @@ _FACTORY_RESET_FILE = Path.home() / "AIIDALAB_FACTORY_RESET"
 
 # The only reset mode of that script; it ignores any other content.
 _RESET_MODE = "local"
-_RESET_MODE_LABEL = "Reset the local software installation"
-_RESET_MODE_DETAILS = (
-    "Moves ~/.local (e.g. pip-installed packages) aside to ~/.local~<date>. "
-    "Apps, AiiDA data and profiles are kept."
-)
+_RESET_MODE_LABEL = "Reset user-installed Python packages"
 
-_FACTORY_RESET_CONFIRM_PHRASE = "factory-reset"
+_RESET_CONFIRM_PHRASE = "reset-packages"
 
 
 class DangerZoneWidget(ControlSectionWidget):
@@ -542,7 +538,7 @@ class DangerZoneWidget(ControlSectionWidget):
         self._confirm_text = ipw.Text()
         self._confirm_text.observe(self._on_confirm_text_change, names="value")
         self._schedule_button = ipw.Button(
-            description="Schedule factory reset",
+            description="Schedule package reset",
             button_style="danger",
             icon="exclamation-triangle",
             disabled=True,
@@ -552,14 +548,10 @@ class DangerZoneWidget(ControlSectionWidget):
         self._schedule_box = ipw.VBox(
             [
                 ipw.HTML(
-                    "A factory reset is performed by the AiiDAlab container on "
-                    "its <b>next restart</b>.<br>"
-                    f"<b>{html.escape(_RESET_MODE_LABEL)}</b>: "
-                    f"{html.escape(_RESET_MODE_DETAILS)}"
+                    f"<b>{html.escape(_RESET_MODE_LABEL)}</b> on the next "
+                    "restart of the AiiDAlab container."
                 ),
-                ipw.HTML(
-                    f"To confirm, type <code>{_FACTORY_RESET_CONFIRM_PHRASE}</code>:"
-                ),
+                ipw.HTML(f"To confirm, type <code>{_RESET_CONFIRM_PHRASE}</code>:"),
                 self._confirm_text,
                 self._schedule_button,
             ]
@@ -567,7 +559,7 @@ class DangerZoneWidget(ControlSectionWidget):
 
         self._scheduled_alert = ipw.HTML()
         cancel_button = ipw.Button(
-            description="Cancel scheduled reset",
+            description="Cancel package reset",
             icon="undo",
             layout=ipw.Layout(width="fit-content"),
         )
@@ -582,9 +574,7 @@ class DangerZoneWidget(ControlSectionWidget):
         self.layout.padding = "12px"
 
     def _on_confirm_text_change(self, change):
-        self._schedule_button.disabled = (
-            change["new"].strip() != _FACTORY_RESET_CONFIRM_PHRASE
-        )
+        self._schedule_button.disabled = change["new"].strip() != _RESET_CONFIRM_PHRASE
 
     def _on_schedule(self, _=None):
         try:
@@ -594,7 +584,7 @@ class DangerZoneWidget(ControlSectionWidget):
             if _FACTORY_RESET_FILE.read_text() != _RESET_MODE:
                 raise RuntimeError("could not verify the content of the flag file")
         except Exception as exc:
-            self.show_error(f"Failed to schedule the factory reset: {exc}")
+            self.show_error(f"Failed to schedule the package reset: {exc}")
         else:
             self.info.value = ""
             self._confirm_text.value = ""
@@ -605,7 +595,7 @@ class DangerZoneWidget(ControlSectionWidget):
         try:
             _FACTORY_RESET_FILE.unlink(missing_ok=True)
         except Exception as exc:
-            self.show_error(f"Failed to cancel the scheduled reset: {exc}")
+            self.show_error(f"Failed to cancel the package reset: {exc}")
         else:
             self.info.value = ""
         self._do_refresh()
@@ -625,13 +615,13 @@ class DangerZoneWidget(ControlSectionWidget):
             what = f"the flag file could not be read: {exc}"
         else:
             what = (
-                f"{_RESET_MODE_LABEL}. {_RESET_MODE_DETAILS}"
+                _RESET_MODE_LABEL
                 if mode == _RESET_MODE
                 else f"unknown mode '{mode}', which the container ignores"
             )
         return (
             "<div class='alert alert-warning' role='alert'>"
-            f"A factory reset is scheduled: <b>{html.escape(what)}</b><br>"
+            f"A reset is scheduled: <b>{html.escape(what)}</b><br>"
             "It is performed the next time this AiiDAlab container starts, i.e. "
             "after your AiiDAlab server has been stopped and started again. "
             "Until then, it can be cancelled.</div>"

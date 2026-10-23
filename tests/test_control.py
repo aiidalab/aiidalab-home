@@ -469,11 +469,11 @@ def _schedule_visible(widget):
 def test_danger_zone_button_needs_confirmation_phrase(danger_zone):
     widget, _ = danger_zone
     assert widget._schedule_button.disabled is True
-    widget._confirm_text.value = "factory"
+    widget._confirm_text.value = "reset"
     assert widget._schedule_button.disabled is True
-    widget._confirm_text.value = "  factory-reset  "
+    widget._confirm_text.value = "  reset-packages  "
     assert widget._schedule_button.disabled is False
-    widget._confirm_text.value = "factory-reset!"
+    widget._confirm_text.value = "reset-packages!"
     assert widget._schedule_button.disabled is True
 
 
@@ -481,12 +481,12 @@ def test_danger_zone_schedule_and_cancel(danger_zone):
     widget, flag_file = danger_zone
     assert _schedule_visible(widget)
 
-    widget._confirm_text.value = "factory-reset"
+    widget._confirm_text.value = "reset-packages"
     widget._schedule_button.click()
 
     assert flag_file.read_text() == "local"
     assert not _schedule_visible(widget)
-    assert "Reset the local software installation" in widget._scheduled_alert.value
+    assert "Reset user-installed Python packages" in widget._scheduled_alert.value
     # The confirmation is cleared, so the button is disarmed again.
     assert widget._confirm_text.value == ""
     assert widget._schedule_button.disabled is True
@@ -511,7 +511,7 @@ def test_danger_zone_unverified_write_is_an_error(danger_zone, monkeypatch):
         return original_read_text(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "read_text", _read_text)
-    widget._confirm_text.value = "factory-reset"
+    widget._confirm_text.value = "reset-packages"
     widget._schedule_button.click()
 
     assert State.ERROR.color in widget.info.value
