@@ -453,11 +453,10 @@ def danger_zone(tmp_path, monkeypatch):
     """A DangerZoneWidget whose flag file is a temporary path.
 
     Never let a test write the real ~/AIIDALAB_FACTORY_RESET: a leftover
-    file erases data on the next container restart.
+    file resets ~/.local on the next container restart.
     """
     flag_file = tmp_path / "AIIDALAB_FACTORY_RESET"
     monkeypatch.setattr(control_module, "_FACTORY_RESET_FILE", flag_file)
-    monkeypatch.delenv("AIIDALAB_FACTORY_RESET", raising=False)
     widget = DangerZoneWidget()
     widget._do_refresh()
     return widget, flag_file
@@ -482,14 +481,12 @@ def test_danger_zone_schedule_and_cancel(danger_zone):
     widget, flag_file = danger_zone
     assert _schedule_visible(widget)
 
-    widget._mode.value = "2"
-    assert "EVERYTHING" in widget._mode_details.value
     widget._confirm_text.value = "factory-reset"
     widget._schedule_button.click()
 
-    assert flag_file.read_text() == "2"
+    assert flag_file.read_text() == "local"
     assert not _schedule_visible(widget)
-    assert "Full factory reset" in widget._scheduled_alert.value
+    assert "Reset the local software installation" in widget._scheduled_alert.value
     # The confirmation is cleared, so the button is disarmed again.
     assert widget._confirm_text.value == ""
     assert widget._schedule_button.disabled is True
@@ -524,12 +521,15 @@ def test_danger_zone_unverified_write_is_an_error(danger_zone, monkeypatch):
     assert "unknown mode" in widget._scheduled_alert.value
 
 
-def test_danger_zone_unknown_mode(danger_zone):
+@pytest.mark.parametrize("value", ["1", "2", "7"])
+def test_danger_zone_unknown_mode(danger_zone, value):
+    # E.g. a numeric mode of older containers, which the container now ignores.
     widget, flag_file = danger_zone
-    flag_file.write_text("7")
+    flag_file.write_text(value)
     widget._do_refresh()
     assert not _schedule_visible(widget)
-    assert "unknown mode &#x27;7&#x27;" in widget._scheduled_alert.value
+    assert f"unknown mode &#x27;{value}&#x27;" in widget._scheduled_alert.value
+    assert "ignores" in widget._scheduled_alert.value
 
 
 def test_danger_zone_unreadable_flag_file(danger_zone):
@@ -545,24 +545,6 @@ def test_danger_zone_unreadable_flag_file(danger_zone):
     assert State.ERROR.color in widget.info.value
     assert "Failed to cancel" in widget.info.value
     assert not _schedule_visible(widget)
-
-
-@pytest.mark.parametrize("value", ["1", "0"])
-def test_danger_zone_env_var_warning(danger_zone, monkeypatch, value):
-    # Any non-empty value overrides the flag file, even "0".
-    widget, _ = danger_zone
-    monkeypatch.setenv("AIIDALAB_FACTORY_RESET", value)
-    widget._do_refresh()
-    assert "takes precedence" in widget._env_warning.value
-    assert f"set to &#x27;{value}&#x27;" in widget._env_warning.value
-
-
-def test_danger_zone_empty_env_var_is_ignored(danger_zone, monkeypatch):
-    # The container script treats an empty variable as unset.
-    widget, _ = danger_zone
-    monkeypatch.setenv("AIIDALAB_FACTORY_RESET", "")
-    widget._do_refresh()
-    assert widget._env_warning.value == ""
 
 
 def test_real_factory_reset_file_was_not_created():
