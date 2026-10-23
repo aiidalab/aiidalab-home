@@ -17,6 +17,7 @@ import ipywidgets as ipw
 from aiida import get_profile, manage, orm
 from aiida.engine.daemon.client import DaemonException
 
+from home import package_reset
 from home.themes import ThemeDefault as Theme
 
 logger = logging.getLogger(__name__)
@@ -518,16 +519,6 @@ class ProfileControlWidget(ControlSectionWidget):
         super().__init__([ipw.HTML("To be implemented.")])
 
 
-# The container's entrypoint (aiidalab-docker-stack,
-# before-notebook.d/50_factory-reset.sh) reads this file on start, performs
-# the reset mode it contains and removes it. A module constant so tests can
-# monkeypatch it: the real file resets ~/.local on the next restart.
-_FACTORY_RESET_FILE = Path.home() / "AIIDALAB_FACTORY_RESET"
-
-# The only reset mode of that script; it ignores any other content.
-_RESET_MODE = "local"
-_RESET_MODE_LABEL = "Reset user-installed Python packages"
-
 _RESET_CONFIRM_PHRASE = "reset-packages"
 
 
@@ -548,7 +539,7 @@ class DangerZoneWidget(ControlSectionWidget):
         self._schedule_box = ipw.VBox(
             [
                 ipw.HTML(
-                    f"<b>{html.escape(_RESET_MODE_LABEL)}</b> on the next "
+                    f"<b>{html.escape(package_reset.RESET_LABEL)}</b> on the next "
                     "restart of the AiiDAlab container."
                 ),
                 ipw.HTML(f"To confirm, type <code>{_RESET_CONFIRM_PHRASE}</code>:"),
@@ -578,11 +569,7 @@ class DangerZoneWidget(ControlSectionWidget):
 
     def _on_schedule(self, _=None):
         try:
-            _FACTORY_RESET_FILE.write_text(_RESET_MODE)
-            # Read it back: a reset the container won't see is worse than an
-            # error, e.g. on a home directory mounted with surprising semantics.
-            if _FACTORY_RESET_FILE.read_text() != _RESET_MODE:
-                raise RuntimeError("could not verify the content of the flag file")
+            package_reset.schedule()
         except Exception as exc:
             self.show_error(f"Failed to schedule the package reset: {exc}")
         else:
@@ -593,7 +580,7 @@ class DangerZoneWidget(ControlSectionWidget):
 
     def _on_cancel(self, _=None):
         try:
-            _FACTORY_RESET_FILE.unlink(missing_ok=True)
+            package_reset.cancel()
         except Exception as exc:
             self.show_error(f"Failed to cancel the package reset: {exc}")
         else:
@@ -601,28 +588,8 @@ class DangerZoneWidget(ControlSectionWidget):
         self._do_refresh()
 
     def _do_refresh(self):
-        scheduled = _FACTORY_RESET_FILE.exists()
+        scheduled = package_reset.is_scheduled()
         if scheduled:
-            self._scheduled_alert.value = self._scheduled_message()
+            self._scheduled_alert.value = package_reset.scheduled_message()
         self._schedule_box.layout.display = "none" if scheduled else ""
         self._scheduled_box.layout.display = "" if scheduled else "none"
-
-    @staticmethod
-    def _scheduled_message():
-        try:
-            mode = _FACTORY_RESET_FILE.read_text().strip()
-        except OSError as exc:
-            what = f"the flag file could not be read: {exc}"
-        else:
-            what = (
-                _RESET_MODE_LABEL
-                if mode == _RESET_MODE
-                else f"unknown mode '{mode}', which the container ignores"
-            )
-        return (
-            "<div class='alert alert-warning' role='alert'>"
-            f"A reset is scheduled: <b>{html.escape(what)}</b><br>"
-            "It is performed the next time this AiiDAlab container starts, i.e. "
-            "after your AiiDAlab server has been stopped and started again. "
-            "Until then, it can be cancelled.</div>"
-        )

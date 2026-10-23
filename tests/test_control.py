@@ -449,17 +449,11 @@ def test_system_resources_do_refresh_partial_failure(
 
 
 @pytest.fixture
-def danger_zone(tmp_path, monkeypatch):
-    """A DangerZoneWidget whose flag file is a temporary path.
-
-    Never let a test write the real ~/AIIDALAB_FACTORY_RESET: a leftover
-    file resets ~/.local on the next container restart.
-    """
-    flag_file = tmp_path / "AIIDALAB_FACTORY_RESET"
-    monkeypatch.setattr(control_module, "_FACTORY_RESET_FILE", flag_file)
+def danger_zone(reset_flag_file):
+    """A DangerZoneWidget whose flag file is a temporary path."""
     widget = DangerZoneWidget()
     widget._do_refresh()
-    return widget, flag_file
+    return widget, reset_flag_file
 
 
 def _schedule_visible(widget):
@@ -545,8 +539,3 @@ def test_danger_zone_unreadable_flag_file(danger_zone):
     assert State.ERROR.color in widget.info.value
     assert "Failed to cancel" in widget.info.value
     assert not _schedule_visible(widget)
-
-
-def test_real_factory_reset_file_was_not_created():
-    # Keep last: nothing above may have written the real flag file.
-    assert not (Path.home() / "AIIDALAB_FACTORY_RESET").exists()
