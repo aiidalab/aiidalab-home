@@ -546,6 +546,7 @@ class DangerZoneWidget(ControlSectionWidget):
             button_style="danger",
             icon="exclamation-triangle",
             disabled=True,
+            layout=ipw.Layout(width="fit-content"),
         )
         self._schedule_button.on_click(self._on_schedule)
         self._schedule_box = ipw.VBox(
@@ -565,7 +566,11 @@ class DangerZoneWidget(ControlSectionWidget):
         )
 
         self._scheduled_alert = ipw.HTML()
-        cancel_button = ipw.Button(description="Cancel scheduled reset", icon="undo")
+        cancel_button = ipw.Button(
+            description="Cancel scheduled reset",
+            icon="undo",
+            layout=ipw.Layout(width="fit-content"),
+        )
         cancel_button.on_click(self._on_cancel)
         self._scheduled_box = ipw.VBox(
             [self._scheduled_alert, cancel_button],
