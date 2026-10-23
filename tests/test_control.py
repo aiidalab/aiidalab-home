@@ -1,6 +1,5 @@
 import re
 import threading
-from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
@@ -8,6 +7,7 @@ import pytest
 from aiida.engine.daemon.client import DaemonException
 
 import home.control as control_module
+from home import package_reset
 from home.control import (
     AiidaStatusOverviewWidget,
     ControlSectionWidget,
@@ -500,23 +500,23 @@ def test_danger_zone_schedule_and_cancel(danger_zone, reset_flag_file):
     assert widget.info.value == ""
 
 
-def test_danger_zone_unverified_write_is_an_error(
-    danger_zone, reset_flag_file, monkeypatch
+@pytest.mark.parametrize("written", [None, "garbled"])
+def test_danger_zone_schedule_failure(
+    danger_zone, reset_flag_file, monkeypatch, written
 ):
+    def _schedule():
+        if written is not None:
+            reset_flag_file.write_text(written)
+        raise OSError("disk trouble")
+
+    monkeypatch.setattr(package_reset, "schedule", _schedule)
     widget = danger_zone
-    original_read_text = Path.read_text
-
-    def _read_text(self, *args, **kwargs):
-        if self == reset_flag_file:
-            return "garbled"
-        return original_read_text(self, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "read_text", _read_text)
     widget._confirm_text.value = "reset-packages"
     widget._schedule_button.click()
 
     assert State.ERROR.color in widget.info.value
-    assert "could not verify" in widget.info.value
-    # What is on disk is shown, with a way to cancel it.
-    assert not _schedule_visible(widget)
-    assert "unknown mode" in _scheduled_alert(widget)
+    assert "disk trouble" in widget.info.value
+    # The confirmation is kept, so the user can retry right away.
+    assert widget._confirm_text.value == "reset-packages"
+    # What is on disk is shown: a half-written file gets the notice to cancel it.
+    assert _schedule_visible(widget) == (written is None)
