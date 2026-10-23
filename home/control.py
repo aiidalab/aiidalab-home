@@ -526,7 +526,7 @@ class DangerZoneWidget(ControlSectionWidget):
     description = "Actions that reset parts of your AiiDAlab environment."
 
     def __init__(self):
-        self._confirm_text = ipw.Text()
+        self._confirm_text = ipw.Text(layout=ipw.Layout(width="220px"))
         self._confirm_text.observe(self._on_confirm_text_change, names="value")
         self._schedule_button = ipw.Button(
             description="Schedule package reset",
@@ -539,12 +539,19 @@ class DangerZoneWidget(ControlSectionWidget):
         self._schedule_box = ipw.VBox(
             [
                 ipw.HTML(
-                    f"<b>{html.escape(package_reset.RESET_LABEL)}</b> on the next "
-                    "restart of the AiiDAlab container."
+                    "<div style='font-size:15px;font-weight:600;'>"
+                    f"{html.escape(package_reset.RESET_LABEL)}</div>"
+                    f"<div style='color:{Theme.COLORS.GRAY};font-size:13px;"
+                    "margin:2px 0 10px 0;'>"
+                    "On the next restart of the AiiDAlab container, ~/.local "
+                    "is moved aside to ~/.local~&lt;date&gt;. Apps, AiiDA data "
+                    "and profiles are kept.</div>"
                 ),
                 ipw.HTML(f"To confirm, type <code>{_RESET_CONFIRM_PHRASE}</code>:"),
-                self._confirm_text,
-                self._schedule_button,
+                ipw.HBox(
+                    [self._confirm_text, self._schedule_button],
+                    layout=ipw.Layout(align_items="center"),
+                ),
             ]
         )
 
