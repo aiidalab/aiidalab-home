@@ -544,8 +544,8 @@ class DangerZoneWidget(ControlSectionWidget):
                     f"<div style='color:{Theme.COLORS.GRAY};font-size:13px;"
                     "margin:2px 0 10px 0;'>"
                     "On the next restart of the AiiDAlab container, ~/.local "
-                    "is moved aside to ~/.local~&lt;date&gt;. Apps, AiiDA data "
-                    "and profiles are kept.</div>"
+                    "will move to ~/.local~&lt;date&gt;. Apps, AiiDA data, "
+                    "and profiles remain untouched.</div>"
                 ),
                 ipw.HTML(f"To confirm, type <code>{_RESET_CONFIRM_PHRASE}</code>:"),
                 ipw.HBox(
