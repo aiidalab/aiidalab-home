@@ -67,7 +67,7 @@ def scheduled_message() -> str:
               <li>
                 Open the
                 <a class="alert-link" href="{html.escape(hub_home)}" target="_blank">
-                  Control Panel </a
+                  Control Panel</a
                 >.
               </li>
               <li>Click <b>Stop My Server</b> and wait.</li>
