@@ -53,25 +53,45 @@ def scheduled_message() -> str:
         )
     # Set by JupyterHub in the environment of the user's server.
     hub_home = os.environ.get("JUPYTERHUB_BASE_URL", "/") + "hub/home"
-    return (
-        "<div class='alert alert-warning' role='alert'>"
-        f"<div style='font-size:15px;'>A reset is scheduled: "
-        f"<b>{html.escape(what)}</b></div>"
-        "<div style='margin:4px 0 8px 0;'>Restart your AiiDAlab container to "
-        "perform it. Until then, the home page shows only this notice.</div>"
-        "<ul style='margin:0;padding-left:20px;line-height:1.8;'>"
-        "<li><b>AiiDAlab server:</b> open the "
-        f"<a class='alert-link' href='{html.escape(hub_home)}' target='_blank'>"
-        "Control Panel</a>, click <i>Stop My Server</i>, then "
-        "<i>Start My Server</i>.</li>"
-        "<li><b>Local, with aiidalab-launch:</b> run "
-        "<code>aiidalab-launch start --restart -p &lt;profile&gt;</code> "
-        "(<code>aiidalab-launch status</code> lists the profiles)</li>"
-        "<li><b>Local, with Docker:</b> run "
-        "<code>docker restart &lt;container&gt;</code> "
-        "(<code>docker ps</code> lists the names)</li>"
-        "</ul></div>"
-    )
+    return f"""
+        <div class="alert alert-warning" role="alert">
+          <div style="line-height: 1.5">
+            A reset has been scheduled: <b>{html.escape(what)}</b>
+            <br />
+            Please restart your AiiDAlab container.
+          </div>
+          <div>
+            <h2>How to restart</h2>
+            <h3>On an AiiDAlab server</h3>
+            <ul style="margin: 0; padding-left: 20px; line-height: 1.8">
+              <li>
+                Open the
+                <a class="alert-link" href="{html.escape(hub_home)}" target="_blank">
+                  Control Panel </a
+                >.
+              </li>
+              <li>Click <b>Stop My Server</b> and wait.</li>
+              <li>Once available, click <b>Start My Server</b>.</li>
+            </ul>
+            <h3>On a local machine</h3>
+            <h4>Using aiidalab-launch</h4>
+            <ul style="margin: 0; padding-left: 20px; line-height: 1.8">
+              <li>
+                Find your active profile with
+                <code>aiidalab-launch status</code>
+              </li>
+              <li>
+                Run <code>aiidalab-launch start --restart -p &lt;profile&gt;</code>
+              </li>
+            </ul>
+            <h4>Using Docker directly</h4>
+            <ul style="margin: 0; padding-left: 20px; line-height: 1.8">
+              <li>Find your active container with <code>docker ps</code></li>
+              <li>Run <code>docker restart &lt;container&gt;</code></li>
+            </ul>
+          </div>
+        </div>
+    """
 
 
 class PackageResetNotice(ipw.VBox):
