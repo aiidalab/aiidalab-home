@@ -139,6 +139,7 @@ class AppManagerWidget(ipw.VBox):
             <br>
             <ul>
             {% for citation in app.citations %}
+                <li>
                 {% if citation.text %}
                     {% if citation.link %}
                         <a href="{{ citation.link }}" target="_blank" noreferrer noopener>{{ citation.text }}</a>
@@ -160,6 +161,7 @@ class AppManagerWidget(ipw.VBox):
                     ({{ citation.year }}).
                     <a href="https://doi.org/{{ citation.doi }}" target="_blank" noreferrer noopener>https://doi.org/{{ citation.doi }}</a>
                 {% endif %}
+                </li>
             {% endfor %}
             </ul>
         {% endif %}
