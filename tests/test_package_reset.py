@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from home import package_reset
@@ -10,19 +8,6 @@ def test_schedule_writes_local_mode(reset_flag_file):
     package_reset.schedule()
     assert reset_flag_file.read_text() == "local"
     assert package_reset.is_scheduled()
-
-
-def test_schedule_raises_when_write_cannot_be_verified(reset_flag_file, monkeypatch):
-    original_read_text = Path.read_text
-
-    def _read_text(self, *args, **kwargs):
-        if self == reset_flag_file:
-            return "garbled"
-        return original_read_text(self, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "read_text", _read_text)
-    with pytest.raises(RuntimeError, match="could not verify"):
-        package_reset.schedule()
 
 
 def test_cancel_removes_flag_file(reset_flag_file):

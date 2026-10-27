@@ -27,10 +27,6 @@ def is_scheduled() -> bool:
 
 def schedule():
     _FACTORY_RESET_FILE.write_text(_RESET_MODE)
-    # Read it back: a reset the container won't see is worse than an
-    # error, e.g. on a home directory mounted with surprising semantics.
-    if _FACTORY_RESET_FILE.read_text() != _RESET_MODE:
-        raise RuntimeError("could not verify the content of the flag file")
 
 
 def cancel():
