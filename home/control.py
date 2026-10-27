@@ -572,7 +572,7 @@ class DangerZoneWidget(ControlSectionWidget):
         else:
             self.info.value = ""
             self._confirm_text.value = ""
-        # Show whatever is on disk now, including a half-written flag file.
+        # Show what is on disk now, whether or not the write went through.
         self._do_refresh()
 
     def _on_cancelled(self):

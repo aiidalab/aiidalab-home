@@ -500,7 +500,7 @@ def test_danger_zone_schedule_and_cancel(danger_zone, reset_flag_file):
     assert widget.info.value == ""
 
 
-@pytest.mark.parametrize("written", [None, "garbled"])
+@pytest.mark.parametrize("written", [None, "loc", "local"])
 def test_danger_zone_schedule_failure(
     danger_zone, reset_flag_file, monkeypatch, written
 ):
@@ -518,5 +518,5 @@ def test_danger_zone_schedule_failure(
     assert "disk trouble" in widget.info.value
     # The confirmation is kept, so the user can retry right away.
     assert widget._confirm_text.value == "reset-packages"
-    # What is on disk is shown: a half-written file gets the notice to cancel it.
-    assert _schedule_visible(widget) == (written is None)
+    # What is on disk is shown: only a complete flag file is a scheduled reset.
+    assert _schedule_visible(widget) == (written != "local")

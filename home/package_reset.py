@@ -22,10 +22,25 @@ RESET_LABEL = "Reset user-installed Python packages"
 
 
 def is_scheduled() -> bool:
-    return _FACTORY_RESET_FILE.exists()
+    """Whether the container performs the reset on its next start.
+
+    Applies the script's own rule, so that nothing it would ignore blocks the
+    home page: a regular file, not a symlink, whose first 64 bytes are the
+    mode, ignoring whitespace. Compared as bytes, so any content is safe.
+    """
+    if _FACTORY_RESET_FILE.is_symlink() or not _FACTORY_RESET_FILE.is_file():
+        return False
+    try:
+        with _FACTORY_RESET_FILE.open("rb") as f:
+            content = f.read(64)
+    except OSError:
+        return False
+    return b"".join(content.split()) == _RESET_MODE.encode()
 
 
 def schedule():
+    # Replace whatever is there rather than write through a symlink.
+    _FACTORY_RESET_FILE.unlink(missing_ok=True)
     _FACTORY_RESET_FILE.write_text(_RESET_MODE)
 
 
@@ -34,24 +49,13 @@ def cancel():
 
 
 def scheduled_message() -> str:
-    """An alert describing the scheduled reset, from what is on disk."""
-    try:
-        # Like the container, which removes all whitespace.
-        mode = "".join(_FACTORY_RESET_FILE.read_text().split())
-    except OSError as exc:
-        what = f"the flag file could not be read: {exc}"
-    else:
-        what = (
-            RESET_LABEL
-            if mode == _RESET_MODE
-            else f"unknown mode '{mode}', which the container ignores"
-        )
+    """An alert describing the scheduled reset and how to perform it."""
     # Set by JupyterHub in the environment of the user's server.
     hub_home = os.environ.get("JUPYTERHUB_BASE_URL", "/") + "hub/home"
     return f"""
         <div class="alert alert-warning" role="alert">
           <div style="line-height: 1.5">
-            A reset has been scheduled: <b>{html.escape(what)}</b>
+            A reset has been scheduled: <b>{html.escape(RESET_LABEL)}</b>
             <br />
             Please restart your AiiDAlab container.
           </div>
