@@ -101,11 +101,19 @@ class PackageResetNotice(ipw.VBox):
         )
         self.cancel_button.on_click(self._on_cancel)
         self.error = ipw.HTML()
+        # The home page hides the terminal link while a reset is scheduled.
+        fallback = ipw.HTML(
+            f"<div style='color:{Theme.COLORS.GRAY};font-size:13px;margin-top:8px;'>"
+            "<b>If cancelling fails:</b> open a "
+            "<a href='./terminal.ipynb' target='_blank'>terminal</a> and run "
+            f"<code>rm {html.escape(str(_FACTORY_RESET_FILE))}</code></div>"
+        )
         super().__init__(
             children=[
                 ipw.HTML(scheduled_message()),
                 self.cancel_button,
                 self.error,
+                fallback,
             ]
         )
 
