@@ -1,22 +1,29 @@
+import logging
 import re
+import subprocess
 import threading
 from types import SimpleNamespace
 from typing import cast
 
 import pytest
 from aiida.engine.daemon.client import DaemonException
+from aiida.storage.log import STORAGE_LOGGER
 
 import home.control as control_module
 from home.control import (
     AiidaStatusOverviewWidget,
     ControlSectionWidget,
     State,
+    StorageWidget,
     SystemResourcesWidget,
     _cpu_status,
     _DaemonClient,
+    _du_bytes,
     _format_bytes,
+    _ListLogHandler,
     _memory_status,
     _read_cgroup_quantity,
+    _repository_path,
     _safe_fraction,
     _sanitize_broker_url,
     _storage_summary,
@@ -444,3 +451,210 @@ def test_system_resources_do_refresh_partial_failure(
     # ...but CPU and disk still updated independently.
     assert widget._cpu_bar.bar_style == "success"
     assert widget._disk_bar.bar_style == "success"
+
+
+def test_repository_path_psql_dos():
+    profile = SimpleNamespace(
+        storage_backend="core.psql_dos",
+        storage_config={"repository_uri": "file:///home/user/my%20aiida/repository"},
+    )
+    assert str(_repository_path(profile)) == "/home/user/my aiida/repository"
+
+
+def test_repository_path_sqlite_dos():
+    profile = SimpleNamespace(
+        storage_backend="core.sqlite_dos",
+        storage_config={"filepath": "/home/user/.aiida/storage"},
+    )
+    assert str(_repository_path(profile)) == "/home/user/.aiida/storage"
+
+
+def test_repository_path_unknown_backend_raises():
+    profile = SimpleNamespace(storage_backend="core.unknown", storage_config={})
+    with pytest.raises(ValueError, match="core.unknown"):
+        _repository_path(profile)
+
+
+def test_du_bytes(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.write_bytes(b"x" * 1000)
+    b.write_bytes(b"x" * 2345)
+    # Allocated blocks (st_blocks is in 512-byte units), not apparent size.
+    assert _du_bytes(a) == a.stat().st_blocks * 512
+    assert (
+        _du_bytes(tmp_path) == sum(p.stat().st_blocks for p in (tmp_path, a, b)) * 512
+    )
+
+
+def test_du_bytes_missing_path_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        _du_bytes(tmp_path / "missing")
+
+
+def test_du_bytes_trusts_output_despite_nonzero_exit(tmp_path, monkeypatch):
+    # du exits nonzero when a file vanishes mid-scan, but still prints a total.
+    def _run(args, **kwargs):
+        return subprocess.CompletedProcess(args, 1, stdout=f"123\t{tmp_path}\n")
+
+    monkeypatch.setattr(control_module.subprocess, "run", _run)
+    assert _du_bytes(tmp_path) == 123
+
+
+def test_du_bytes_unparsable_output_raises(tmp_path, monkeypatch):
+    def _run(args, **kwargs):
+        return subprocess.CompletedProcess(args, 1, stdout="")
+
+    monkeypatch.setattr(control_module.subprocess, "run", _run)
+    with pytest.raises(RuntimeError, match="could not determine the size"):
+        _du_bytes(tmp_path)
+
+
+def test_list_log_handler_collects_messages():
+    test_logger = logging.getLogger("home.tests.list_log_handler")
+    handler = _ListLogHandler()
+    test_logger.addHandler(handler)
+    try:
+        test_logger.warning("packing %d files", 3)
+    finally:
+        test_logger.removeHandler(handler)
+    assert handler.lines == ["packing 3 files"]
+
+
+def test_storage_do_refresh(
+    aiida_profile, run_threads_synchronously, monkeypatch, tmp_path
+):
+    # A missing apps directory must fail only its own row.
+    monkeypatch.setattr(control_module, "AIIDALAB_APPS", str(tmp_path / "missing"))
+    widget = StorageWidget()
+    widget.refresh()
+    table = widget._table.value
+    assert aiida_profile.name in table
+
+    rows = re.findall(r"<tr>.*?</tr>", table)
+    assert len(rows) == 5
+    failed = [row for row in rows if State.ERROR.color in row]
+    assert len(failed) == 1
+    assert "<b>Installed apps</b>" in failed[0]
+    assert "does not exist" in failed[0]
+
+
+def test_storage_refresh_skipped_while_maintaining(
+    aiida_profile, run_threads_synchronously, monkeypatch
+):
+    widget = StorageWidget()
+    calls = []
+    monkeypatch.setattr(widget, "_do_refresh", lambda: calls.append(1))
+
+    widget._maintaining = True
+    widget.refresh()
+    assert calls == []
+
+    widget._maintaining = False
+    widget.refresh()
+    assert calls == [1]
+
+
+class _FakeStorage:
+    def __init__(self):
+        self.maintain_calls = []
+
+    def maintain(self, full, dry_run):
+        self.maintain_calls.append((full, dry_run))
+        STORAGE_LOGGER.info("Deleting 0 unreferenced objects ...")
+        STORAGE_LOGGER.getChild("disk_object_store").info("Packing <loose> files")
+
+
+@pytest.fixture
+def storage_widget(aiida_profile, run_threads_synchronously, monkeypatch):
+    """A StorageWidget with a fake storage, a stopped fake daemon and a
+    stubbed table refresh."""
+    storage = _FakeStorage()
+    monkeypatch.setattr(
+        control_module.manage.get_manager(), "get_profile_storage", lambda: storage
+    )
+    widget = StorageWidget()
+    widget._daemon = cast(_DaemonClient, SimpleNamespace(is_daemon_running=False))
+    monkeypatch.setattr(widget, "_do_refresh", lambda: None)
+    return widget, storage
+
+
+def _assert_controls_enabled(widget):
+    assert widget._maintaining is False
+    assert widget._maintain_button.disabled is False
+    assert widget._dry_run_checkbox.disabled is False
+    assert widget._full_checkbox.disabled is False
+    assert widget.refresh_button.disabled is False
+
+
+def test_storage_full_maintenance_refused_while_daemon_runs(storage_widget):
+    widget, storage = storage_widget
+    widget._daemon = cast(_DaemonClient, SimpleNamespace(is_daemon_running=True))
+    widget._full_checkbox.value = True
+
+    widget._maintain_button.click()
+
+    assert storage.maintain_calls == []
+    assert State.WARNING.color in widget._maintain_output.value
+    assert "Stop the daemon first" in widget._maintain_output.value
+    _assert_controls_enabled(widget)
+
+
+def test_storage_dry_run_captures_info_log(storage_widget):
+    widget, storage = storage_widget
+    level_before = STORAGE_LOGGER.level
+
+    widget._maintain_button.click()
+
+    assert storage.maintain_calls == [(False, True)]
+    output = widget._maintain_output.value
+    assert "Dry run finished." in output
+    # INFO messages from the logger and its children, escaped.
+    assert "Deleting 0 unreferenced objects ..." in output
+    assert "Packing &lt;loose&gt; files" in output
+    assert "Reclaimed" not in output
+    assert STORAGE_LOGGER.level == level_before
+    assert not any(isinstance(h, _ListLogHandler) for h in STORAGE_LOGGER.handlers)
+    _assert_controls_enabled(widget)
+
+
+def test_storage_maintenance_reports_reclaimed_space(storage_widget, monkeypatch):
+    widget, storage = storage_widget
+    sizes = iter([1000, 400])
+    monkeypatch.setattr(
+        control_module, "_repository_size_or_none", lambda profile: next(sizes)
+    )
+    refreshes = []
+    monkeypatch.setattr(widget, "_do_refresh", lambda: refreshes.append(1))
+    widget._dry_run_checkbox.value = False
+
+    widget._maintain_button.click()
+
+    assert storage.maintain_calls == [(False, False)]
+    assert "Maintenance finished." in widget._maintain_output.value
+    assert "Reclaimed 600.0 B" in widget._maintain_output.value
+    assert refreshes == [1]
+    _assert_controls_enabled(widget)
+
+
+def test_storage_maintenance_failure_is_shown(storage_widget):
+    widget, storage = storage_widget
+
+    def _raise(full, dry_run):
+        raise RuntimeError("profile is locked")
+
+    storage.maintain = _raise
+
+    widget._maintain_button.click()
+
+    assert State.ERROR.color in widget._maintain_output.value
+    assert "Maintenance failed: profile is locked" in widget._maintain_output.value
+    _assert_controls_enabled(widget)
+
+
+def test_storage_dry_run_on_real_storage(aiida_profile, run_threads_synchronously):
+    # Guards the log capture against upstream logger renames.
+    widget = StorageWidget()
+    widget._maintain_button.click()
+    output = widget._maintain_output.value
+    assert "Dry run finished." in output
+    assert "unreferenced objects" in output
