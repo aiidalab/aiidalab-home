@@ -13,8 +13,7 @@ from home.themes import ThemeDefault as Theme
 
 # The container's entrypoint (aiidalab-docker-stack,
 # before-notebook.d/50_factory-reset.sh) reads this file on start, performs
-# the reset mode it contains and removes it. A module constant so tests can
-# monkeypatch it: the real file resets ~/.local on the next restart.
+# the reset mode it contains and removes it.
 _FACTORY_RESET_FILE = Path.home() / "AIIDALAB_FACTORY_RESET"
 
 # The only reset mode of that script; it ignores any other content.

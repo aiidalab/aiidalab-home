@@ -490,7 +490,7 @@ def test_danger_zone_schedule_and_cancel(danger_zone, reset_flag_file):
     assert reset_flag_file.read_text() == "local"
     assert not _schedule_visible(widget)
     assert "Reset user-installed Python packages" in _scheduled_alert(widget)
-    # The confirmation is cleared, so the button is disarmed again.
+    # The confirmation is cleared, so the button is disabled again.
     assert widget._confirm_text.value == ""
     assert widget._schedule_button.disabled is True
 
