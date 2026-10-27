@@ -11,6 +11,7 @@ from aiidalab.app import AiidaLabApp
 from aiidalab.config import AIIDALAB_APPS
 from markdown import Markdown
 
+from home import package_reset
 from home.utils import load_widget
 from home.widgets import AppStatusInfoWidget
 
@@ -73,8 +74,17 @@ class AiidaLabHome:
         return {"order": [], "hidden": []}  # default config
 
     def render(self):
-        """Rendering all apps."""
+        """Rendering all apps, or only the notice of a scheduled package reset."""
+        if package_reset.is_scheduled():
+            # Nothing should be done in an environment that is about to be reset.
+            self.output.children = [
+                package_reset.PackageResetNotice(on_cancelled=self.render)
+            ]
+        else:
+            self.output.children = self._create_app_children()
+        return self.output
 
+    def _create_app_children(self):
         home = self._create_home_widget()
         children = [home]
 
@@ -95,9 +105,7 @@ class AiidaLabHome:
 
             children.append(self._app_widgets[name])
 
-        self.output.children = children
-
-        return self.output
+        return children
 
     def load_apps(self):
         """Load apps according to the order defined in the config file."""

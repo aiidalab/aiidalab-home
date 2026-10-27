@@ -17,6 +17,7 @@ import ipywidgets as ipw
 from aiida import get_profile, manage, orm
 from aiida.engine.daemon.client import DaemonException
 
+from home import package_reset
 from home.themes import ThemeDefault as Theme
 
 logger = logging.getLogger(__name__)
@@ -518,8 +519,80 @@ class ProfileControlWidget(ControlSectionWidget):
         super().__init__([ipw.HTML("To be implemented.")])
 
 
+_RESET_CONFIRM_PHRASE = "reset-packages"
+
+
 class DangerZoneWidget(ControlSectionWidget):
-    description = "Irreversible actions that can lead to data loss."
+    description = "Actions that reset parts of your AiiDAlab environment."
 
     def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+        self._confirm_text = ipw.Text(layout=ipw.Layout(width="220px"))
+        self._confirm_text.observe(self._on_confirm_text_change, names="value")
+        self._schedule_button = ipw.Button(
+            description="Schedule package reset",
+            button_style="danger",
+            icon="exclamation-triangle",
+            disabled=True,
+            layout=ipw.Layout(width="fit-content"),
+        )
+        self._schedule_button.on_click(self._on_schedule)
+        self._schedule_box = ipw.VBox(
+            [
+                ipw.HTML(
+                    "<div style='font-size:15px;font-weight:600;'>"
+                    f"{html.escape(package_reset.RESET_LABEL)}</div>"
+                    f"<div style='color:{Theme.COLORS.GRAY};font-size:13px;"
+                    "margin:2px 0 10px 0;'>"
+                    "On the next restart of the AiiDAlab container, ~/.local "
+                    "will move to ~/.local~&lt;date&gt;. Apps, AiiDA data, "
+                    "and profiles remain untouched.</div>"
+                ),
+                ipw.HTML(f"To confirm, type <code>{_RESET_CONFIRM_PHRASE}</code>:"),
+                ipw.HBox(
+                    [self._confirm_text, self._schedule_button],
+                    layout=ipw.Layout(align_items="center"),
+                ),
+            ]
+        )
+
+        # Built once and only shown or hidden: its content does not change.
+        self._notice = package_reset.PackageResetNotice(on_cancelled=self._on_cancelled)
+
+        super().__init__([self._schedule_box, self._notice])
+        self.layout.border = f"1px solid {Theme.COLORS.DANGER}"
+        self.layout.padding = "12px"
+        # Unlike other sections, refreshing is instant, so show the right view
+        # from the start.
+        self.refresh()
+
+    def _on_confirm_text_change(self, change):
+        self._schedule_button.disabled = change["new"].strip() != _RESET_CONFIRM_PHRASE
+
+    def _on_schedule(self, _=None):
+        try:
+            package_reset.schedule()
+        except Exception as exc:
+            self.show_error(f"Failed to schedule the package reset: {exc}")
+        else:
+            self.info.value = ""
+            self._confirm_text.value = ""
+        # Show what is on disk now, whether or not the write went through.
+        self.refresh()
+
+    def _on_cancelled(self):
+        self.info.value = ""
+        self.refresh()
+
+    def refresh(self, _=None):
+        # Checking the flag file is instant, so refresh synchronously, not on
+        # the base class's background thread: nothing races the buttons.
+        scheduled = package_reset.is_scheduled()
+        if not scheduled:
+            # Don't show a stale cancel error when the notice comes back.
+            self._notice.error.value = ""
+        self._schedule_box.layout.display = "none" if scheduled else ""
+        self._notice.layout.display = "" if scheduled else "none"
+        if self._last_updated is not None:
+            self._last_updated.value = (
+                f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
+            )
