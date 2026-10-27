@@ -451,22 +451,25 @@ def test_system_resources_do_refresh_partial_failure(
 @pytest.fixture
 def danger_zone(reset_flag_file):
     """A DangerZoneWidget whose flag file is a temporary path."""
-    widget = DangerZoneWidget()
-    widget._do_refresh()
-    return widget
+    return DangerZoneWidget()
 
 
 def _schedule_visible(widget):
     return widget._schedule_box.layout.display != "none"
 
 
-def _notice(widget):
-    (notice,) = widget._scheduled_box.children
-    return notice
-
-
-def _scheduled_alert(widget):
-    return _notice(widget).children[0].value
+def test_danger_zone_shows_what_is_on_disk_right_away(reset_flag_file):
+    # From the start, and on every refresh, without a background thread.
+    reset_flag_file.write_text("local")
+    widget = DangerZoneWidget()
+    assert not _schedule_visible(widget)
+    # E.g. removed from a terminal, then the Refresh button clicked.
+    reset_flag_file.unlink()
+    assert widget.refresh_button is not None
+    assert widget._last_updated is not None
+    widget.refresh_button.click()
+    assert _schedule_visible(widget)
+    assert "Last updated" in widget._last_updated.value
 
 
 def test_danger_zone_button_needs_confirmation_phrase(danger_zone):
@@ -489,12 +492,12 @@ def test_danger_zone_schedule_and_cancel(danger_zone, reset_flag_file):
 
     assert reset_flag_file.read_text() == "local"
     assert not _schedule_visible(widget)
-    assert "Reset user-installed Python packages" in _scheduled_alert(widget)
+    assert "Reset user-installed Python packages" in widget._notice.children[0].value
     # The confirmation is cleared, so the button is disabled again.
     assert widget._confirm_text.value == ""
     assert widget._schedule_button.disabled is True
 
-    _notice(widget).cancel_button.click()
+    widget._notice.cancel_button.click()
     assert not reset_flag_file.exists()
     assert _schedule_visible(widget)
     assert widget.info.value == ""

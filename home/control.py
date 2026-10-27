@@ -555,11 +555,15 @@ class DangerZoneWidget(ControlSectionWidget):
             ]
         )
 
-        self._scheduled_box = ipw.VBox(layout=ipw.Layout(display="none"))
+        # Built once and only shown or hidden: its content does not change.
+        self._notice = package_reset.PackageResetNotice(on_cancelled=self._on_cancelled)
 
-        super().__init__([self._schedule_box, self._scheduled_box])
+        super().__init__([self._schedule_box, self._notice])
         self.layout.border = f"1px solid {Theme.COLORS.DANGER}"
         self.layout.padding = "12px"
+        # Unlike other sections, refreshing is instant, so show the right view
+        # from the start.
+        self.refresh()
 
     def _on_confirm_text_change(self, change):
         self._schedule_button.disabled = change["new"].strip() != _RESET_CONFIRM_PHRASE
@@ -573,18 +577,22 @@ class DangerZoneWidget(ControlSectionWidget):
             self.info.value = ""
             self._confirm_text.value = ""
         # Show what is on disk now, whether or not the write went through.
-        self._do_refresh()
+        self.refresh()
 
     def _on_cancelled(self):
         self.info.value = ""
-        self._do_refresh()
+        self.refresh()
 
-    def _do_refresh(self):
+    def refresh(self, _=None):
+        # Checking the flag file is instant, so refresh synchronously, not on
+        # the base class's background thread: nothing races the buttons.
         scheduled = package_reset.is_scheduled()
-        if scheduled:
-            # Rebuilt from what is on disk now.
-            self._scheduled_box.children = [
-                package_reset.PackageResetNotice(on_cancelled=self._on_cancelled)
-            ]
+        if not scheduled:
+            # Don't show a stale cancel error when the notice comes back.
+            self._notice.error.value = ""
         self._schedule_box.layout.display = "none" if scheduled else ""
-        self._scheduled_box.layout.display = "" if scheduled else "none"
+        self._notice.layout.display = "" if scheduled else "none"
+        if self._last_updated is not None:
+            self._last_updated.value = (
+                f"Last updated: {datetime.now().strftime('%H:%M:%S')}"
+            )
