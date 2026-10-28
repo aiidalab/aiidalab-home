@@ -196,7 +196,7 @@ class MigrationWidget(ipw.VBox):
 
     def __init__(self, marker_path=None, flag_path=None):
         self.marker_path = marker_path or (Path.home() / ".local" / "lib" / "python3.9")
-        self.flag_path = flag_path or Path.home() / ".PENDING_MIGRATION_FLAG"
+        self.flag_path = flag_path or Path.home() / ".FLAG_PENDING_MIGRATION"
         self.status = ipw.HTML()
 
         if self.marker_path.exists() and not self.flag_path.exists():
@@ -209,21 +209,25 @@ class MigrationWidget(ipw.VBox):
 
         self.visible = self.marker_path.exists() or self.flag_path.exists()
 
-        instructions = ipw.HTML(
-            """
+        instructions = ipw.HTML("""
             <h2 style='text-align: center'>⚠️ LEGACY ENVIRONMENT DETECTED ⚠️</h2>
-            <p>The following steps must be completed prior to using the apps:</p>
+            <p>The following steps <b>must be completed prior to using the apps</b>. Please <b>read all steps before proceeding</b>.</p>
             <ul>
-                <li>From <b>Control &gt; Danger zone</b>, schedule <b>Reset local software</b>.</li>
+                <li>From <b>Control</b> &gt; <b>Danger zone</b>, schedule a local software reset.</li>
                 <li>Restart the container and return to the home page.</li>
-                <li>If the AiiDAlab widgets base (AWB) app is installed, remove its folder (in ~/apps) from terminal.</li>
-                <li>Open each installed app's <b>Manage App</b> page and click <b>Reinstall</b>.</li>
-                <li>If an app has no compatible version, contact its developers to request a compatible release.</li>
+                <li>
+                <p>For each app, using its <b>Manage App</b> page:</p>
+                <ul>
+                    <li>If the app is AiiDAlab widgets base (AWB), uninstall it*.</li>
+                    <li>Otherwise, reinstall it. If an app has no compatible version, contact its developers to request a compatible release.</li>
+                </ul>
+                </li>
                 <li>Refer any other migration issues to the relevant app developers.</li>
             </ul>
+            <p><em>*AWB is now pre-installed as a library</em></p>
+            <div style="border-top: 1px solid #d8a426; margin: 12px 0;"></div>
             <p>Tick the following tasks upon completion:</p>
-            """
-        )
+        """)
 
         self.steps = [
             ipw.Checkbox(

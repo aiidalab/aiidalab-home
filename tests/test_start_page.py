@@ -34,7 +34,7 @@ def test_home_shows_only_reset_notice_while_scheduled(home, reset_flag_file):
 def test_migration_marker_creates_persistent_flag(tmp_path):
     marker = tmp_path / ".local" / "lib" / "python3.9"
     marker.mkdir(parents=True)
-    flag = tmp_path / ".PENDING_MIGRATION_FLAG"
+    flag = tmp_path / ".FLAG_PENDING_MIGRATION"
 
     widget = MigrationWidget(marker, flag)
 
@@ -42,22 +42,20 @@ def test_migration_marker_creates_persistent_flag(tmp_path):
     assert flag.exists()
     assert widget.confirm_button.disabled
     assert [step.description for step in widget.steps] == [
-        "Reset local software and restarted container",
+        "Reset local software",
         "Removed AWB if installed",
         "Reinstalled apps",
-        "Restarted daemon",
     ]
     banner_html = widget.children[0].value
     assert "⚠️ LEGACY ENVIRONMENT DETECTED ⚠️" in banner_html
     assert "Control &gt; Danger zone" in banner_html
-    assert "Control &gt; Daemon" in banner_html
     assert "<ul>" in banner_html
     assert "remove its folder (in ~/apps)" in banner_html
     assert "contact its developers to request a compatible release" in banner_html
 
 
 def test_existing_migration_flag_shows_widget_without_marker(tmp_path):
-    flag = tmp_path / ".PENDING_MIGRATION_FLAG"
+    flag = tmp_path / ".FLAG_PENDING_MIGRATION"
     flag.touch()
 
     widget = MigrationWidget(tmp_path / "missing-marker", flag)
@@ -67,7 +65,7 @@ def test_existing_migration_flag_shows_widget_without_marker(tmp_path):
 
 
 def test_migration_confirmation_requires_all_steps(tmp_path):
-    flag = tmp_path / ".PENDING_MIGRATION_FLAG"
+    flag = tmp_path / ".FLAG_PENDING_MIGRATION"
     flag.touch()
     widget = MigrationWidget(tmp_path / "missing-marker", flag)
 
@@ -81,7 +79,7 @@ def test_migration_confirmation_requires_all_steps(tmp_path):
 def test_migration_confirmation_keeps_flag_while_marker_exists(tmp_path):
     marker = tmp_path / ".local" / "lib" / "python3.9"
     marker.mkdir(parents=True)
-    flag = tmp_path / ".PENDING_MIGRATION_FLAG"
+    flag = tmp_path / ".FLAG_PENDING_MIGRATION"
     widget = MigrationWidget(marker, flag)
     for step in widget.steps:
         step.value = True
@@ -95,7 +93,7 @@ def test_migration_confirmation_keeps_flag_while_marker_exists(tmp_path):
 def test_migration_confirmation_clears_flag_after_marker_is_removed(tmp_path):
     marker = tmp_path / ".local" / "lib" / "python3.9"
     marker.mkdir(parents=True)
-    flag = tmp_path / ".PENDING_MIGRATION_FLAG"
+    flag = tmp_path / ".FLAG_PENDING_MIGRATION"
     widget = MigrationWidget(marker, flag)
     for step in widget.steps:
         step.value = True
