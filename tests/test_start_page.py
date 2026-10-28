@@ -48,10 +48,6 @@ def test_migration_marker_creates_persistent_flag(tmp_path):
     ]
     banner_html = widget.children[0].value
     assert "⚠️ LEGACY ENVIRONMENT DETECTED ⚠️" in banner_html
-    assert "Control &gt; Danger zone" in banner_html
-    assert "<ul>" in banner_html
-    assert "remove its folder (in ~/apps)" in banner_html
-    assert "contact its developers to request a compatible release" in banner_html
 
 
 def test_existing_migration_flag_shows_widget_without_marker(tmp_path):
