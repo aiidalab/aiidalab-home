@@ -11,7 +11,7 @@ def test_terminal(selenium_driver, final_screenshot):
     page = selenium.window_handles[-1]
     sleep(3)
     selenium.switch_to.window(page)
-    selenium.find_element(By.CSS_SELECTOR, ".xterm-cursor-layer").click()
+    selenium.find_element(By.CSS_SELECTOR, ".xterm-screen").click()
     selenium.find_element(By.CSS_SELECTOR, ".xterm-helper-textarea").send_keys(
         "jupyter --version"
     )
