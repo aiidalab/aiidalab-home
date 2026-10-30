@@ -25,7 +25,7 @@ jobs:
         strategy:
             matrix:
                 browser: [Chrome, Firefox]
-                docker-tag: ['2026.1029']
+                docker-tag: [edge]
             fail-fast: false
 
         runs-on: ubuntu-latest

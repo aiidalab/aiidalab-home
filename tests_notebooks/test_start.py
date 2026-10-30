@@ -51,9 +51,12 @@ def test_click_filemanager(selenium_driver, final_screenshot):
         selenium.find_element(By.CSS_SELECTOR, ".fa-file-text-o").click()
     assert len(handles) == 1
     selenium.switch_to.window(handles.pop())
-    selenium.find_element(By.LINK_TEXT, "Running").click()
-    selenium.find_element(By.LINK_TEXT, "Clusters").click()
-    selenium.find_element(By.LINK_TEXT, "Files").click()
+    selenium.find_element(
+        By.XPATH, '//div[@class="lm-TabBar-tabLabel" and normalize-space()="Running"]'
+    ).click()
+    selenium.find_element(
+        By.XPATH, '//div[@class="lm-TabBar-tabLabel" and normalize-space()="Files"]'
+    ).click()
 
 
 def test_process_list_link_on_start(selenium_driver, final_screenshot):
