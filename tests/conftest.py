@@ -8,6 +8,7 @@ from aiida.workflows.arithmetic.multiply_add import MultiplyAddWorkChain
 from plumpy import ProcessState
 
 import home.package_reset
+from home.package_migration import MigrationWidget
 
 pytest_plugins = ["aiida.manage.tests.pytest_fixtures"]
 
@@ -31,6 +32,16 @@ def reset_flag_file(tmp_path, monkeypatch):
     flag_file = tmp_path / "AIIDALAB_FACTORY_RESET"
     monkeypatch.setattr(home.package_reset, "_FACTORY_RESET_FILE", flag_file)
     return flag_file
+
+
+@pytest.fixture
+def migration_paths(tmp_path, monkeypatch):
+    """Temporary paths in place of the migration's legacy directory and flag."""
+    marker = tmp_path / ".local" / "lib" / "python3.9"
+    flag = tmp_path / ".FLAG_PENDING_MIGRATION"
+    monkeypatch.setattr(MigrationWidget, "_LEGACY_USER_SITE", marker)
+    monkeypatch.setattr(MigrationWidget, "_PENDING_FLAG", flag)
+    return marker, flag
 
 
 @pytest.fixture

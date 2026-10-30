@@ -17,17 +17,13 @@ def home(monkeypatch):
 
 
 @pytest.fixture
-def migration_home(monkeypatch, tmp_path):
-    marker = tmp_path / ".local" / "lib" / "python3.9"
-    flag = tmp_path / ".FLAG_PENDING_MIGRATION"
-    monkeypatch.setattr(MigrationWidget, "_LEGACY_USER_SITE", marker)
-    monkeypatch.setattr(MigrationWidget, "_PENDING_FLAG", flag)
+def migration_home(migration_paths, monkeypatch, tmp_path):
     monkeypatch.setattr(start_page.Path, "home", classmethod(lambda cls: tmp_path))
     monkeypatch.setattr(
         AiidaLabHome, "_create_home_widget", lambda self: ipw.HTML("home")
     )
     monkeypatch.setattr(AiidaLabHome, "load_apps", lambda self: [])
-    return AiidaLabHome(), marker, flag
+    return AiidaLabHome(), *migration_paths
 
 
 def test_home_renders_migration_widget_when_pending(migration_home):
