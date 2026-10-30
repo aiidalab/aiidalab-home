@@ -144,11 +144,11 @@ class ControlSectionWidget(ipw.VBox):
         """
 
 
-class DaemonControlWidget(ControlSectionWidget):
-    description = "The daemon runs your AiiDA processes in the background."
+# class DaemonControlWidget(ControlSectionWidget):
+#     description = "The daemon runs your AiiDA processes in the background."
 
-    def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+#     def __init__(self):
+#         super().__init__([ipw.HTML("To be implemented.")])
 
 
 def _storage_summary(profile) -> str | None:
@@ -498,25 +498,25 @@ class SystemResourcesWidget(ControlSectionWidget):
             self._set_row_error(self._disk_bar, self._disk_label, exc)
 
 
-class StorageWidget(ControlSectionWidget):
-    description = "Disk usage of profile data and apps; storage maintenance."
+# class StorageWidget(ControlSectionWidget):
+#     description = "Disk usage of profile data and apps; storage maintenance."
 
-    def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
-
-
-class ProcessControlWidget(ControlSectionWidget):
-    description = "Inspect, pause, resume or kill AiiDA processes."
-
-    def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+#     def __init__(self):
+#         super().__init__([ipw.HTML("To be implemented.")])
 
 
-class ProfileControlWidget(ControlSectionWidget):
-    description = "Manage AiiDA profiles: default profile and deletion."
+# class ProcessControlWidget(ControlSectionWidget):
+#     description = "Inspect, pause, resume or kill AiiDA processes."
 
-    def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
+#     def __init__(self):
+#         super().__init__([ipw.HTML("To be implemented.")])
+
+
+# class ProfileControlWidget(ControlSectionWidget):
+#     description = "Manage AiiDA profiles: default profile and deletion."
+
+#     def __init__(self):
+#         super().__init__([ipw.HTML("To be implemented.")])
 
 
 _RESET_CONFIRM_PHRASE = "reset-packages"
