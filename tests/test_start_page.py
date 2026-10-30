@@ -1,9 +1,9 @@
 import ipywidgets as ipw
 import pytest
 
+from home.package_migration import MigrationWidget, has_pending_migration
 from home.package_reset import PackageResetNotice
 from home.start_page import AiidaLabHome
-from home.widgets import MigrationWidget
 
 
 @pytest.fixture
@@ -48,6 +48,18 @@ def test_migration_marker_creates_persistent_flag(tmp_path):
     ]
     banner_html = widget.children[0].value
     assert "⚠️ LEGACY ENVIRONMENT DETECTED ⚠️" in banner_html
+
+
+def test_migration_is_pending_when_marker_or_flag_exists(tmp_path):
+    marker = tmp_path / ".local" / "lib" / "python3.9"
+    flag = tmp_path / ".FLAG_PENDING_MIGRATION"
+
+    assert not has_pending_migration(marker, flag)
+    marker.mkdir(parents=True)
+    assert has_pending_migration(marker, flag)
+    marker.rmdir()
+    flag.touch()
+    assert has_pending_migration(marker, flag)
 
 
 def test_existing_migration_flag_shows_widget_without_marker(tmp_path):
