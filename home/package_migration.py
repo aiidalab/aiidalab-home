@@ -47,15 +47,17 @@ class MigrationWidget(ipw.VBox):
                 <li>From <b>Control</b> &gt; <b>Danger zone</b>, schedule a local software reset.</li>
                 <li>Restart the container and return to the home page.</li>
                 <li>
-                <p>For each app, using its <b>Manage App</b> page:</p>
+                <p>For each app, click <b>Manage App</b>, then:</p>
                 <ul>
                     <li>If the app is AiiDAlab widgets base (AWB), uninstall it*.</li>
-                    <li>Otherwise, reinstall it. If an app has no compatible version, contact its developers to request a compatible release.</li>
+                    <li>For all other apps, click <b>Update</b> to update the app to a compatible version**.</li>
+                    <li>Refresh the home page to confirm the app is now compatible.</li>
                 </ul>
                 </li>
-                <li>Refer any other migration issues to the relevant app developers.</li>
+                <li>Refer any migration issues to the relevant app developers.</li>
             </ul>
             <p><em>*AWB is now pre-installed as a library</em></p>
+            <p><em>**If an app has no compatible version, contact its developers to request a compatible release</em></p>
             <div style="border-top: 1px solid #d8a426; margin: 12px 0;"></div>
             <p><b>Once all steps are complete</b>, check each box below and confirm to proceed:</p>
         """)
