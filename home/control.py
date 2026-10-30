@@ -512,13 +512,6 @@ class ProcessControlWidget(ControlSectionWidget):
         super().__init__([ipw.HTML("To be implemented.")])
 
 
-class ProfileControlWidget(ControlSectionWidget):
-    description = "Manage AiiDA profiles: default profile and deletion."
-
-    def __init__(self):
-        super().__init__([ipw.HTML("To be implemented.")])
-
-
 _RESET_CONFIRM_PHRASE = "reset-packages"
 
 
