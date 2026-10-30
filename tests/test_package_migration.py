@@ -1,14 +1,24 @@
-from home.package_migration import MigrationWidget, has_pending_migration
+import pytest
+
+from home.package_migration import MigrationWidget
 
 
-def test_migration_marker_creates_persistent_flag(tmp_path):
+@pytest.fixture
+def migration_paths(tmp_path, monkeypatch):
     marker = tmp_path / ".local" / "lib" / "python3.9"
-    marker.mkdir(parents=True)
     flag = tmp_path / ".FLAG_PENDING_MIGRATION"
+    monkeypatch.setattr(MigrationWidget, "_LEGACY_USER_SITE", marker)
+    monkeypatch.setattr(MigrationWidget, "_PENDING_FLAG", flag)
+    return marker, flag
 
-    widget = MigrationWidget(marker, flag)
 
-    assert widget.visible
+def test_migration_marker_creates_persistent_flag(migration_paths):
+    marker, flag = migration_paths
+    marker.mkdir(parents=True)
+
+    widget = MigrationWidget()
+
+    assert MigrationWidget.has_pending_migration()
     assert flag.exists()
     assert widget.confirm_button.disabled
     assert [step.description for step in widget.steps] == [
@@ -18,24 +28,24 @@ def test_migration_marker_creates_persistent_flag(tmp_path):
     ]
     banner_html = widget.children[0].value
     assert "⚠️ LEGACY ENVIRONMENT DETECTED ⚠️" in banner_html
+    assert "read all steps carefully before proceeding" in banner_html
 
 
-def test_migration_is_pending_when_marker_or_flag_exists(tmp_path):
-    marker = tmp_path / ".local" / "lib" / "python3.9"
-    flag = tmp_path / ".FLAG_PENDING_MIGRATION"
+def test_migration_is_pending_when_marker_or_flag_exists(migration_paths):
+    marker, flag = migration_paths
 
-    assert not has_pending_migration(marker, flag)
+    assert not MigrationWidget.has_pending_migration()
     marker.mkdir(parents=True)
-    assert has_pending_migration(marker, flag)
+    assert MigrationWidget.has_pending_migration()
     marker.rmdir()
     flag.touch()
-    assert has_pending_migration(marker, flag)
+    assert MigrationWidget.has_pending_migration()
 
 
-def test_migration_confirmation_requires_all_steps(tmp_path):
-    flag = tmp_path / ".FLAG_PENDING_MIGRATION"
+def test_migration_confirmation_requires_all_steps(migration_paths):
+    _, flag = migration_paths
     flag.touch()
-    widget = MigrationWidget(tmp_path / "missing-marker", flag)
+    widget = MigrationWidget()
 
     for step in widget.steps[:-1]:
         step.value = True
@@ -44,11 +54,10 @@ def test_migration_confirmation_requires_all_steps(tmp_path):
     assert flag.exists()
 
 
-def test_migration_confirmation_keeps_flag_while_marker_exists(tmp_path):
-    marker = tmp_path / ".local" / "lib" / "python3.9"
+def test_migration_confirmation_keeps_flag_while_marker_exists(migration_paths):
+    marker, flag = migration_paths
     marker.mkdir(parents=True)
-    flag = tmp_path / ".FLAG_PENDING_MIGRATION"
-    widget = MigrationWidget(marker, flag)
+    widget = MigrationWidget()
     for step in widget.steps:
         step.value = True
 
@@ -58,11 +67,10 @@ def test_migration_confirmation_keeps_flag_while_marker_exists(tmp_path):
     assert "still exists" in widget.status.value
 
 
-def test_migration_confirmation_clears_flag_after_marker_is_removed(tmp_path):
-    marker = tmp_path / ".local" / "lib" / "python3.9"
+def test_migration_confirmation_clears_flag_after_marker_is_removed(migration_paths):
+    marker, flag = migration_paths
     marker.mkdir(parents=True)
-    flag = tmp_path / ".FLAG_PENDING_MIGRATION"
-    widget = MigrationWidget(marker, flag)
+    widget = MigrationWidget()
     for step in widget.steps:
         step.value = True
     marker.rmdir()
