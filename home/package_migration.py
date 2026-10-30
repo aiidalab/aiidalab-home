@@ -90,9 +90,7 @@ class MigrationWidget(ipw.VBox):
         try:
             self._PENDING_FLAG.touch()
         except OSError as exc:
-            self._show_error(
-                f"Could not save the migration reminder: {html.escape(str(exc))}"
-            )
+            self._show_error(f"Could not save the migration reminder: {exc}")
 
     def _update_confirmation_state(self, _=None):
         self.confirm_button.disabled = not all(step.value for step in self.steps)
@@ -107,9 +105,7 @@ class MigrationWidget(ipw.VBox):
         try:
             self._PENDING_FLAG.unlink(missing_ok=True)
         except OSError as exc:
-            self._show_error(
-                f"Could not clear the migration reminder: {html.escape(str(exc))}"
-            )
+            self._show_error(f"Could not clear the migration reminder: {exc}")
             return
 
         self.layout.display = "none"
