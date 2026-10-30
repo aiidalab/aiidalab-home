@@ -41,7 +41,7 @@ class MigrationWidget(ipw.VBox):
     def __init__(self):
         self.status = ipw.HTML()
 
-        if self.has_pending_migration():
+        if self._LEGACY_USER_SITE.exists():
             self._mark_pending_migration()
 
         self.steps = [
@@ -86,7 +86,7 @@ class MigrationWidget(ipw.VBox):
         return cls._LEGACY_USER_SITE.exists() or cls._PENDING_FLAG.exists()
 
     def _mark_pending_migration(self):
-        """Mark the migration as pending by creating the pending flag."""
+        """Save the migration reminder as _PENDING_FLAG."""
         try:
             self._PENDING_FLAG.touch()
         except OSError as exc:
