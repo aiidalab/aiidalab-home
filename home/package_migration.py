@@ -94,7 +94,9 @@ class MigrationWidget(ipw.VBox):
     def _confirm_migration(self, _=None):
         if self._LEGACY_USER_SITE.exists():
             self._show_error(
-                "The Python 3.9 user-site directory still exists. The migration reminder has not been cleared."
+                f"{self._LEGACY_USER_SITE} still exists, so the reset has not run yet. "
+                "Schedule it in Control > Danger zone, restart the container, "
+                "then confirm again."
             )
             return
 
