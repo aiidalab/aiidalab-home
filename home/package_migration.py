@@ -13,7 +13,7 @@ class MigrationWidget(ipw.VBox):
     _LEGACY_USER_SITE = Path.home() / ".local" / "lib" / "python3.9"
 
     # Keeps the notice up after the reset has removed the directory above,
-    # until the user confirms that the apps were reinstalled.
+    # until the user confirms that the apps were updated.
     _PENDING_FLAG = Path.home() / ".FLAG_PENDING_MIGRATION"
 
     _INSTRUCTIONS = """
@@ -38,6 +38,13 @@ class MigrationWidget(ipw.VBox):
         <p><b>Once all steps are complete</b>, check each box below and confirm to proceed:</p>
     """
 
+    # One checkbox per step of the instructions above, ticked once it is done.
+    _STEPS = (
+        "Scheduled the reset and restarted the container",
+        "Uninstalled AWB, if it was installed",
+        "Updated all other apps",
+    )
+
     def __init__(self):
         self.status = ipw.HTML()
 
@@ -45,18 +52,7 @@ class MigrationWidget(ipw.VBox):
             self._mark_pending_migration()
 
         self.steps = [
-            ipw.Checkbox(
-                description="Reset local software",
-                indent=False,
-            ),
-            ipw.Checkbox(
-                description="Removed AWB if installed",
-                indent=False,
-            ),
-            ipw.Checkbox(
-                description="Reinstalled apps",
-                indent=False,
-            ),
+            ipw.Checkbox(description=step, indent=False) for step in self._STEPS
         ]
         for step in self.steps:
             step.observe(self._update_confirmation_state, names="value")
