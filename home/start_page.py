@@ -12,6 +12,7 @@ from aiidalab.config import AIIDALAB_APPS
 from markdown import Markdown
 
 from home import package_reset
+from home.package_migration import MigrationWidget
 from home.utils import load_widget
 from home.widgets import AppStatusInfoWidget
 
@@ -95,6 +96,9 @@ class AiidaLabHome:
             content = warning_file.read_text()
             notification = self._create_notification(content)
             children.append(notification)
+
+        if MigrationWidget.has_pending_migration():
+            children.append(MigrationWidget())
 
         apps = self.load_apps()
 
