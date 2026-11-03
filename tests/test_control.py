@@ -643,65 +643,54 @@ def test_worker_table_html_no_workers(workers):
     assert _worker_table_html(workers) == ""
 
 
-def _fake_daemon_client(**kwargs):
-    return SimpleNamespace(**kwargs)
+class _ProbeClient:
+    """A daemon client returning, or raising, the given state and workers."""
+
+    def __init__(self, running, workers):
+        self._running = running
+        self._workers = workers
+
+    @property
+    def is_daemon_running(self):
+        if isinstance(self._running, Exception):
+            raise self._running
+        return self._running
+
+    def get_worker_info(self):
+        if isinstance(self._workers, Exception):
+            raise self._workers
+        return {"info": self._workers}
 
 
-def test_probe_daemon_workers_not_running():
-    client = _fake_daemon_client(is_daemon_running=False, get_worker_info=None)
-    assert _probe_daemon_workers(client) == (
-        State.WARNING,
-        "Daemon is not running",
-        None,
-    )
+_TWO_WORKERS = {"1": {"wid": 1}, "2": {"wid": 2}}
+_NOT_CALLED = AssertionError("get_worker_info() must not be called")
 
 
-def test_probe_daemon_workers_running():
-    info = {"info": {"1": {"wid": 1}, "2": {"wid": 2}}}
-    client = _fake_daemon_client(is_daemon_running=True, get_worker_info=lambda: info)
-    state, text, workers = _probe_daemon_workers(client)
-    assert state == State.OK
-    assert "2 worker" in text
-    assert workers == info["info"]
-
-
-def test_probe_daemon_workers_running_without_workers():
-    client = _fake_daemon_client(
-        is_daemon_running=True, get_worker_info=lambda: {"info": {}}
-    )
-    state, text, workers = _probe_daemon_workers(client)
-    assert state == State.WARNING
-    assert "0 workers" in text
-    assert workers == {}
-
-
-def test_probe_daemon_workers_stopped_in_between():
-    def _raise():
-        raise DaemonNotRunningException("The daemon is not running.")
-
-    client = _fake_daemon_client(is_daemon_running=True, get_worker_info=_raise)
-    assert _probe_daemon_workers(client) == (
-        State.WARNING,
-        "Daemon is not running",
-        None,
-    )
-
-
-def test_probe_daemon_workers_unreachable_is_an_error():
-    def _raise():
-        raise DaemonException("stale PID file")
-
-    client = _fake_daemon_client(is_daemon_running=True, get_worker_info=_raise)
-    assert _probe_daemon_workers(client) == (State.ERROR, "stale PID file", None)
-
-
-def test_probe_daemon_workers_is_running_raises():
-    class _Client:
-        @property
-        def is_daemon_running(self):
-            raise RuntimeError("no profile")
-
-    assert _probe_daemon_workers(_Client()) == (State.ERROR, "no profile", None)
+@pytest.mark.parametrize(
+    "running, workers, expected",
+    [
+        (False, _NOT_CALLED, (State.WARNING, "Daemon is not running", None)),
+        (
+            True,
+            _TWO_WORKERS,
+            (State.OK, "Daemon is running with 2 worker(s)", _TWO_WORKERS),
+        ),
+        (True, {}, (State.WARNING, "Daemon is running with 0 workers", {})),
+        (
+            True,
+            DaemonNotRunningException("The daemon is not running."),
+            (State.WARNING, "Daemon is not running", None),
+        ),
+        (
+            True,
+            DaemonException("stale PID file"),
+            (State.ERROR, "stale PID file", None),
+        ),
+        (RuntimeError("no profile"), _NOT_CALLED, (State.ERROR, "no profile", None)),
+    ],
+)
+def test_probe_daemon_workers(running, workers, expected):
+    assert _probe_daemon_workers(_ProbeClient(running, workers)) == expected
 
 
 class _FakeDaemon:
