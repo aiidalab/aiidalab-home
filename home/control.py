@@ -148,6 +148,13 @@ class ControlSectionWidget(ipw.VBox):
         """
 
 
+# Daemon section.
+_LOG_TAIL_LINES = 50
+_LOG_TAIL_BYTES = 64 * 1024
+# Must exceed circus' graceful_timeout (30 s) for stopping a worker.
+_WORKER_CHANGE_TIMEOUT = 40
+
+
 def _probe_daemon_workers(client) -> tuple[State, str, dict | None]:
     """Probe the daemon and return a (state, text, workers) tuple.
 
@@ -256,12 +263,6 @@ def _worker_table_html(workers, stopping=None) -> str:
     )
 
 
-_LOG_TAIL_BYTES = 64 * 1024
-
-# Must exceed circus' graceful_timeout (30 s) for stopping a worker.
-_WORKER_CHANGE_TIMEOUT = 40
-
-
 def _read_log_tail(path, lines) -> str:
     """The last `lines` lines of the file at `path`.
 
@@ -281,7 +282,6 @@ def _read_log_tail(path, lines) -> str:
 
 class DaemonControlWidget(ControlSectionWidget):
     description = "The daemon runs your AiiDA processes in the background."
-    _LOG_TAIL_LINES = 50
 
     def __init__(self):
         self._busy = False
@@ -313,7 +313,7 @@ class DaemonControlWidget(ControlSectionWidget):
         log_name = Path(self._daemon.daemon_log_file).name
         self._log_accordion = ipw.Accordion(
             children=[self._log_content],
-            titles=[f"Daemon log: last {self._LOG_TAIL_LINES} lines ({log_name})"],
+            titles=[f"Daemon log: last {_LOG_TAIL_LINES} lines ({log_name})"],
             selected_index=None,
         )
         self._log_accordion.observe(self._reload_log_if_open, names="selected_index")
@@ -522,7 +522,7 @@ class DaemonControlWidget(ControlSectionWidget):
 
     def _reload_log(self):
         try:
-            tail = _read_log_tail(self._daemon.daemon_log_file, self._LOG_TAIL_LINES)
+            tail = _read_log_tail(self._daemon.daemon_log_file, _LOG_TAIL_LINES)
         except Exception as exc:
             self._log_content.value = _state_span(
                 State.ERROR, f"Failed to read the log: {exc}"
