@@ -15,7 +15,11 @@ from typing import ClassVar, Protocol
 import aiida
 import ipywidgets as ipw
 from aiida import get_profile, manage, orm
-from aiida.engine.daemon.client import DaemonException, DaemonNotRunningException
+from aiida.engine.daemon.client import (
+    DaemonException,
+    DaemonNotRunningException,
+    DaemonTimeoutException,
+)
 
 from home import package_reset
 from home.themes import ThemeDefault as Theme
@@ -229,6 +233,9 @@ def _worker_table_html(workers) -> str:
 
 _LOG_TAIL_BYTES = 64 * 1024
 
+# Must exceed circus' graceful_timeout (30 s) for stopping a worker.
+_WORKER_CHANGE_TIMEOUT = 40
+
 
 def _read_log_tail(path, lines) -> str:
     """The last `lines` lines of the file at `path`.
@@ -338,9 +345,10 @@ class DaemonControlWidget(ControlSectionWidget):
             return
         self._run_action(
             "add a worker",
-            lambda: self._daemon.increase_workers(1),
+            self._add_worker,
             "Adding a worker...",
             "A worker has been added.",
+            pending_message="The new worker is still starting; refresh in a moment.",
         )
 
     def _on_remove_worker(self, _=None):
@@ -352,6 +360,10 @@ class DaemonControlWidget(ControlSectionWidget):
             self._remove_worker,
             "Removing a worker...",
             "A worker has been removed.",
+            pending_message=(
+                "The worker is still shutting down, which can take a while if it "
+                "is running processes; refresh in a moment."
+            ),
         )
 
     def _start(self):
@@ -366,13 +378,29 @@ class DaemonControlWidget(ControlSectionWidget):
         except DaemonNotRunningException:
             self._start()
 
+    # Wait for the change, else the status probed right after is stale.
+    def _add_worker(self):
+        return self._daemon.increase_workers(
+            1, timeout=_WORKER_CHANGE_TIMEOUT, wait=True
+        )
+
     def _remove_worker(self):
         # The button state can be stale, so re-check the live worker count.
         if self._daemon.get_number_of_workers() <= 1:
             raise RuntimeError("at least one worker is required")
-        return self._daemon.decrease_workers(1)
+        return self._daemon.decrease_workers(
+            1, timeout=_WORKER_CHANGE_TIMEOUT, wait=True
+        )
 
-    def _run_action(self, action_name, action, in_progress_message, success_message):
+    def _run_action(
+        self,
+        action_name,
+        action,
+        in_progress_message,
+        success_message,
+        pending_message=None,
+    ):
+        """Run `action` in a thread; on timeout, warn with `pending_message`."""
         if self._busy:
             return
         self._busy = True
@@ -388,6 +416,11 @@ class DaemonControlWidget(ControlSectionWidget):
                 # instead of raising.
                 if response and response.get("status") == "error":
                     raise RuntimeError(response["reason"])
+            except DaemonTimeoutException as exc:
+                if pending_message is None:
+                    self.show_error(f"Failed to {action_name}: {exc}")
+                else:
+                    self.show_warning(pending_message)
             except Exception as exc:
                 self.show_error(f"Failed to {action_name}: {exc}")
             else:

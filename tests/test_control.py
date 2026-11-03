@@ -4,7 +4,11 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from aiida.engine.daemon.client import DaemonException, DaemonNotRunningException
+from aiida.engine.daemon.client import (
+    DaemonException,
+    DaemonNotRunningException,
+    DaemonTimeoutException,
+)
 
 import home.control as control_module
 from home import package_reset
@@ -699,13 +703,16 @@ class _FakeDaemon:
         if not self.running:
             raise DaemonNotRunningException("The daemon is not running.")
 
-    def increase_workers(self, number):
+    # Like circus, the change is only visible on return when waiting for it.
+    def increase_workers(self, number, timeout=None, wait=False):
         self.calls.append(("increase", number))
-        self.workers += number
+        if wait:
+            self.workers += number
 
-    def decrease_workers(self, number):
+    def decrease_workers(self, number, timeout=None, wait=False):
         self.calls.append(("decrease", number))
-        self.workers -= number
+        if wait:
+            self.workers -= number
 
 
 @pytest.fixture
@@ -838,6 +845,32 @@ def test_daemon_add_and_remove_worker(daemon_widget):
     widget.remove_worker_button.click()
     assert daemon.workers == 2
     assert "A worker has been removed." in widget.info.value
+    # The status is not stale.
+    assert "2 worker" in widget._status.value
+    assert widget._worker_table.value.count("<tr>") == 3
+
+
+@pytest.mark.parametrize(
+    "button, method, expected",
+    [
+        ("add_worker_button", "increase_workers", "still starting"),
+        ("remove_worker_button", "decrease_workers", "still shutting down"),
+    ],
+)
+def test_daemon_worker_change_timeout_is_a_warning(
+    daemon_widget, monkeypatch, button, method, expected
+):
+    widget, daemon = daemon_widget
+
+    def _time_out(number, timeout=None, wait=False):
+        raise DaemonTimeoutException("Connection to the daemon timed out.")
+
+    monkeypatch.setattr(daemon, method, _time_out)
+    getattr(widget, button).click()
+    assert State.WARNING.color in widget.info.value
+    assert expected in widget.info.value
+    assert "Failed" not in widget.info.value
+    _assert_action_buttons_enabled(widget)
 
 
 def test_daemon_remove_last_worker_is_refused(daemon_widget):
@@ -858,7 +891,7 @@ def test_daemon_refused_command_is_shown(daemon_widget, monkeypatch):
         "status": "error",
         "reason": "arbiter is already running watcher_decr command",
     }
-    monkeypatch.setattr(daemon, "decrease_workers", lambda number: refusal)
+    monkeypatch.setattr(daemon, "decrease_workers", lambda number, **_: refusal)
     widget.remove_worker_button.click()
     assert State.ERROR.color in widget.info.value
     assert "Failed to remove a worker: arbiter is already running" in widget.info.value
