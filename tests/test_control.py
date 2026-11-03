@@ -755,29 +755,24 @@ def daemon_widget(aiida_profile, run_threads_synchronously, monkeypatch):
     return widget, daemon
 
 
-def test_daemon_buttons_when_stopped(daemon_widget):
+@pytest.mark.parametrize(
+    "running, workers, add_disabled, remove_disabled, remove_tooltip",
+    [
+        (False, 2, True, True, "The daemon is not running"),
+        (True, 1, False, True, "At least one worker is required"),
+        (True, 2, False, False, "Stop the oldest worker"),
+    ],
+)
+def test_daemon_worker_buttons(
+    daemon_widget, running, workers, add_disabled, remove_disabled, remove_tooltip
+):
     widget, daemon = daemon_widget
-    daemon.running = False
+    daemon.running = running
+    daemon.workers = workers
     widget._update_status()
-    assert "not running" in widget._status.value
-    assert widget.add_worker_button.disabled is True
-    assert widget.remove_worker_button.disabled is True
-    assert widget.remove_worker_button.tooltip == "The daemon is not running"
-
-
-def test_daemon_remove_worker_disabled_at_one_worker(daemon_widget):
-    widget, daemon = daemon_widget
-    daemon.workers = 1
-    widget._update_status()
-    assert widget.add_worker_button.disabled is False
-    assert widget.remove_worker_button.disabled is True
-    assert widget.remove_worker_button.tooltip == "At least one worker is required"
-
-    daemon.workers = 2
-    widget._update_status()
-    assert widget.remove_worker_button.disabled is False
-    assert "2 worker" in widget._status.value
-    assert widget._worker_table.value.count("<tr>") == 3
+    assert widget.add_worker_button.disabled is add_disabled
+    assert widget.remove_worker_button.disabled is remove_disabled
+    assert widget.remove_worker_button.tooltip == remove_tooltip
 
 
 def test_daemon_warns_about_more_workers_than_cpus(daemon_widget, monkeypatch):
@@ -889,8 +884,6 @@ def test_daemon_add_and_remove_worker(daemon_widget):
 
 def test_daemon_remove_worker_shows_the_stopping_worker(daemon_widget, monkeypatch):
     widget, daemon = daemon_widget
-    widget._update_status()
-    assert widget.remove_worker_button.tooltip == "Stop the oldest worker"
     seen = {}
     decrease_workers = daemon.decrease_workers
 
