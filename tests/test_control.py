@@ -24,6 +24,7 @@ from home.control import (
     _format_bytes,
     _humanize_age,
     _memory_status,
+    _oldest_worker,
     _probe_daemon_workers,
     _read_cgroup_quantity,
     _read_log_tail,
@@ -601,6 +602,26 @@ def test_worker_table_html():
     assert "9999" in rows[3]
 
 
+def test_worker_table_html_marks_stopping_worker():
+    workers = {"1234": {"wid": 1, "age": 120}, "5678": {"wid": 2, "age": 60}}
+    rows = re.findall(r"<tr>.*?</tr>", _worker_table_html(workers, stopping="1234"))
+    assert "stopping..." in rows[1]
+    assert "2m" not in rows[1]
+    assert "stopping" not in rows[2]
+    assert "1m" in rows[2]
+
+
+def test_oldest_worker():
+    workers = {
+        "1234": {"wid": 1, "age": 60},
+        "5678": {"wid": 2, "age": 120.5},
+        "9999": "No such process (stopped?)",
+        "4321": {"wid": 3, "age": "N/A"},
+    }
+    assert _oldest_worker(workers) == "5678"
+    assert _oldest_worker({"9999": "No such process (stopped?)"}) is None
+
+
 @pytest.mark.parametrize("workers", [None, {}])
 def test_worker_table_html_no_workers(workers):
     assert _worker_table_html(workers) == ""
@@ -684,7 +705,12 @@ class _FakeDaemon:
     def get_worker_info(self):
         if not self.running:
             raise DaemonNotRunningException("The daemon is not running.")
-        return {"info": {str(pid): {"wid": pid} for pid in range(self.workers)}}
+        # Worker 0 is the oldest.
+        return {
+            "info": {
+                str(pid): {"wid": pid, "age": 100 - pid} for pid in range(self.workers)
+            }
+        }
 
     def get_number_of_workers(self):
         return len(self.get_worker_info()["info"])
@@ -848,6 +874,29 @@ def test_daemon_add_and_remove_worker(daemon_widget):
     # The status is not stale.
     assert "2 worker" in widget._status.value
     assert widget._worker_table.value.count("<tr>") == 3
+    assert "stopping" not in widget._worker_table.value
+
+
+def test_daemon_remove_worker_shows_the_stopping_worker(daemon_widget, monkeypatch):
+    widget, daemon = daemon_widget
+    widget._update_status()
+    assert widget.remove_worker_button.tooltip == "Stop the oldest worker"
+    seen = {}
+    decrease_workers = daemon.decrease_workers
+
+    def _decrease(number, **kwargs):
+        # What the page shows while circus stops the worker.
+        seen["table"] = widget._worker_table.value
+        seen["info"] = widget.info.value
+        return decrease_workers(number, **kwargs)
+
+    monkeypatch.setattr(daemon, "decrease_workers", _decrease)
+    widget.remove_worker_button.click()
+    rows = re.findall(r"<tr>.*?</tr>", seen["table"])
+    # Worker 0 is the oldest, so circus stops it.
+    assert "stopping..." in rows[1]
+    assert "stopping" not in rows[2]
+    assert "Stopping the oldest worker (PID 0)" in seen["info"]
 
 
 @pytest.mark.parametrize(

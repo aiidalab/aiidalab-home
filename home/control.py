@@ -194,8 +194,21 @@ def _format_percent(value) -> str:
     return f"{value:.1f}%" if isinstance(value, (int, float)) else "?"
 
 
-def _worker_table_html(workers) -> str:
-    """Table of per-worker circus stats, or '' if there are no workers."""
+def _oldest_worker(workers):
+    """PID of the oldest worker, the one circus stops first, or None."""
+    ages = {
+        pid: stats["age"]
+        for pid, stats in workers.items()
+        if isinstance(stats, dict) and isinstance(stats.get("age"), (int, float))
+    }
+    return max(ages, key=ages.__getitem__, default=None)
+
+
+def _worker_table_html(workers, stopping=None) -> str:
+    """Table of per-worker circus stats, or '' if there are no workers.
+
+    The row of the worker with PID `stopping` is marked as stopping.
+    """
     if not workers:
         return ""
     headers = ("Worker", "PID", "CPU", "Memory", "RSS", "Uptime")
@@ -216,12 +229,14 @@ def _worker_table_html(workers) -> str:
             _format_percent(stats.get("cpu")),
             _format_percent(stats.get("mem")),
             stats.get("mem_info1", "?"),
-            _humanize_age(stats.get("age")),
+            "stopping..." if pid == stopping else _humanize_age(stats.get("age")),
         )
+        style = "padding:1px 8px;"
+        if pid == stopping:
+            style += f"color:{State.WARNING.color};font-style:italic;"
         rows.append(
             "".join(
-                f"<td style='padding:1px 8px;'>{html.escape(str(cell))}</td>"
-                for cell in cells
+                f"<td style='{style}'>{html.escape(str(cell))}</td>" for cell in cells
             )
         )
     return (
@@ -385,9 +400,18 @@ class DaemonControlWidget(ControlSectionWidget):
         )
 
     def _remove_worker(self):
-        # The button state can be stale, so re-check the live worker count.
-        if self._daemon.get_number_of_workers() <= 1:
+        # The button state can be stale, so re-check the live workers.
+        workers = self._daemon.get_worker_info().get("info", {})
+        if len(workers) <= 1:
             raise RuntimeError("at least one worker is required")
+        # circus stops the oldest worker; show which one while we wait.
+        pid = _oldest_worker(workers)
+        if pid is not None:
+            self._worker_table.value = _worker_table_html(workers, stopping=pid)
+            self._show_in_progress(
+                f"Stopping the oldest worker (PID {pid}); "
+                "it finishes its current tasks first..."
+            )
         return self._daemon.decrease_workers(
             1, timeout=_WORKER_CHANGE_TIMEOUT, wait=True
         )
@@ -406,7 +430,7 @@ class DaemonControlWidget(ControlSectionWidget):
         self._busy = True
         for button in self._action_buttons:
             button.disabled = True
-        self.info.value = f"{in_progress_message} <i class='fa fa-spinner fa-spin'></i>"
+        self._show_in_progress(in_progress_message)
 
         def worker():
             try:
@@ -440,6 +464,9 @@ class DaemonControlWidget(ControlSectionWidget):
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _show_in_progress(self, message):
+        self.info.value = f"{message} <i class='fa fa-spinner fa-spin'></i>"
+
     def refresh(self, _=None):
         # A refresh during an action (e.g. when the tab is revisited) would
         # re-enable buttons; the action re-probes the status when it is done.
@@ -471,7 +498,7 @@ class DaemonControlWidget(ControlSectionWidget):
             self.remove_worker_button.tooltip = "At least one worker is required"
         else:
             self.remove_worker_button.disabled = False
-            self.remove_worker_button.tooltip = ""
+            self.remove_worker_button.tooltip = "Stop the oldest worker"
 
         self._reload_log_if_open()
 
