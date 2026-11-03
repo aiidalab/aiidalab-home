@@ -622,6 +622,22 @@ def test_oldest_worker():
     assert _oldest_worker({"9999": "No such process (stopped?)"}) is None
 
 
+def test_worker_table_html_oldest_first_without_circus_ids():
+    workers = {
+        "1111": {"wid": 7, "age": 0},
+        "2222": "No such process (stopped?)",
+        "3333": {"wid": 8, "age": 120},
+    }
+    table = _worker_table_html(workers)
+    rows = re.findall(r"<tr>.*?</tr>", table)
+    assert "Worker" not in rows[0]
+    assert "3333" in rows[1]
+    assert "1111" in rows[2]
+    assert "2222" in rows[3]
+    assert ">7<" not in table
+    assert ">8<" not in table
+
+
 @pytest.mark.parametrize("workers", [None, {}])
 def test_worker_table_html_no_workers(workers):
     assert _worker_table_html(workers) == ""

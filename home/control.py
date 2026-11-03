@@ -194,37 +194,47 @@ def _format_percent(value) -> str:
     return f"{value:.1f}%" if isinstance(value, (int, float)) else "?"
 
 
+def _worker_age(stats):
+    """A worker's age in seconds, or None if circus did not report it."""
+    if isinstance(stats, dict) and isinstance(stats.get("age"), (int, float)):
+        return stats["age"]
+    return None
+
+
 def _oldest_worker(workers):
     """PID of the oldest worker, the one circus stops first, or None."""
-    ages = {
-        pid: stats["age"]
-        for pid, stats in workers.items()
-        if isinstance(stats, dict) and isinstance(stats.get("age"), (int, float))
-    }
+    ages = {pid: _worker_age(stats) for pid, stats in workers.items()}
+    ages = {pid: age for pid, age in ages.items() if age is not None}
     return max(ages, key=ages.__getitem__, default=None)
 
 
 def _worker_table_html(workers, stopping=None) -> str:
     """Table of per-worker circus stats, or '' if there are no workers.
 
-    The row of the worker with PID `stopping` is marked as stopping.
+    Oldest first; the row of the worker with PID `stopping` is marked. circus'
+    worker ids are left out: they are reused, so they would only confuse.
     """
     if not workers:
         return ""
-    headers = ("Worker", "PID", "CPU", "Memory", "RSS", "Uptime")
+    headers = ("PID", "CPU", "Memory", "RSS", "Uptime")
     rows = [
         "".join(
             f"<th style='padding:1px 8px;text-align:left;'>{header}</th>"
             for header in headers
         )
     ]
-    for pid, stats in workers.items():
+
+    def oldest_first(item):
+        age = _worker_age(item[1])
+        return (age is None, -(age or 0))  # workers without an age go last
+
+    by_age = sorted(workers.items(), key=oldest_first)
+    for pid, stats in by_age:
         if not isinstance(stats, dict):
             # circus reports a message instead of stats for a worker that
             # has just stopped.
             stats = {}
         cells = (
-            stats.get("wid", "?"),
             pid,
             _format_percent(stats.get("cpu")),
             _format_percent(stats.get("mem")),
