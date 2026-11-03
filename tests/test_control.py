@@ -863,6 +863,50 @@ def test_daemon_restart_failure_is_shown(daemon_widget, monkeypatch):
     _assert_action_buttons_enabled(widget)
 
 
+@pytest.mark.parametrize(
+    "button", ["stop_button", "add_worker_button", "remove_worker_button"]
+)
+def test_daemon_action_when_stopped_only_warns(daemon_widget, button):
+    widget, daemon = daemon_widget
+    daemon.running = False
+    getattr(widget, button).click()
+    assert daemon.calls == []
+    assert "The daemon is not running." in widget.info.value
+
+
+def test_daemon_restart(daemon_widget):
+    widget, daemon = daemon_widget
+    widget.restart_button.click()
+    assert daemon.calls == ["restart"]
+    assert "The daemon has been restarted." in widget.info.value
+    _assert_action_buttons_enabled(widget)
+
+
+@pytest.mark.parametrize(
+    "button, method, running, action",
+    [
+        ("start_button", "start_daemon", False, "start the daemon"),
+        ("stop_button", "stop_daemon", True, "stop the daemon"),
+        ("restart_button", "restart_daemon", True, "restart the daemon"),
+    ],
+)
+def test_daemon_timeout_of_other_actions_is_an_error(
+    daemon_widget, monkeypatch, button, method, running, action
+):
+    widget, daemon = daemon_widget
+    daemon.running = running
+
+    def _time_out(**_):
+        raise DaemonTimeoutException("Connection to the daemon timed out.")
+
+    monkeypatch.setattr(daemon, method, _time_out)
+    getattr(widget, button).click()
+    assert State.ERROR.color in widget.info.value
+    assert (
+        f"Failed to {action}: Connection to the daemon timed out." in widget.info.value
+    )
+
+
 def test_daemon_failing_status_probe_after_action(daemon_widget, monkeypatch):
     widget, daemon = daemon_widget
 
@@ -913,6 +957,16 @@ def test_daemon_remove_worker_shows_the_stopping_worker(daemon_widget, monkeypat
     assert "stopping..." in rows[1]
     assert "stopping" not in rows[2]
     assert "Stopping the oldest worker (PID 0)" in seen["info"]
+
+
+def test_daemon_remove_worker_without_ages(daemon_widget, monkeypatch):
+    widget, daemon = daemon_widget
+    # A worker that has just stopped, and one without an age.
+    workers = {"1": "No such process (stopped?)", "2": {"cpu": 0.0}}
+    monkeypatch.setattr(daemon, "get_worker_info", lambda: {"info": workers})
+    widget.remove_worker_button.click()
+    assert daemon.calls == [("decrease", 1)]
+    assert "A worker has been removed." in widget.info.value
 
 
 @pytest.mark.parametrize(
@@ -1001,6 +1055,14 @@ def test_daemon_log_loads_when_opened(daemon_widget, tmp_path):
     assert widget.refresh_button is not None
     widget.refresh_button.click()
     assert "worker stopped" in widget._log_content.value
+
+
+def test_daemon_log_read_error_is_shown(daemon_widget, tmp_path):
+    widget, daemon = daemon_widget
+    daemon.daemon_log_file = str(tmp_path)  # A directory, not a file.
+    widget._log_accordion.selected_index = 0
+    assert State.ERROR.color in widget._log_content.value
+    assert "Failed to read the log" in widget._log_content.value
 
 
 def test_daemon_do_refresh_real_client(aiida_profile, run_threads_synchronously):
