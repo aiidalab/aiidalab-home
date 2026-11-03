@@ -816,13 +816,6 @@ def test_daemon_stop_and_start(daemon_widget, monkeypatch):
     _assert_action_buttons_enabled(widget)
 
 
-def test_daemon_start_when_running_only_warns(daemon_widget):
-    widget, daemon = daemon_widget
-    widget.start_button.click()
-    assert daemon.calls == []
-    assert "already running" in widget.info.value
-
-
 def test_daemon_restart_falls_back_to_start(daemon_widget, monkeypatch):
     widget, daemon = daemon_widget
     _configure_default_workers(monkeypatch, 3)
@@ -834,14 +827,21 @@ def test_daemon_restart_falls_back_to_start(daemon_widget, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "button", ["stop_button", "add_worker_button", "remove_worker_button"]
+    "button, running, message",
+    [
+        ("start_button", True, "The daemon is already running."),
+        ("stop_button", False, "The daemon is not running."),
+        ("add_worker_button", False, "The daemon is not running."),
+        ("remove_worker_button", False, "The daemon is not running."),
+    ],
 )
-def test_daemon_action_when_stopped_only_warns(daemon_widget, button):
+def test_daemon_action_only_warns(daemon_widget, button, running, message):
     widget, daemon = daemon_widget
-    daemon.running = False
+    daemon.running = running
     getattr(widget, button).click()
     assert daemon.calls == []
-    assert "The daemon is not running." in widget.info.value
+    assert State.WARNING.color in widget.info.value
+    assert message in widget.info.value
 
 
 def test_daemon_restart(daemon_widget):
