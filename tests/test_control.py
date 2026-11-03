@@ -967,13 +967,15 @@ def test_daemon_log_loads_when_opened(daemon_widget, tmp_path):
     log.write_text("worker started <ok>\n")
     daemon.daemon_log_file = str(log)
 
+    assert widget._log_accordion.titles[0].startswith("Daemon log: last 50 lines")
     assert widget._log_content.value == ""
     widget._log_accordion.selected_index = 0
     assert "worker started &lt;ok&gt;" in widget._log_content.value
 
-    # While open, the tail follows status updates.
+    # While open, the tail follows status updates, e.g. the Refresh button.
     log.write_text("worker stopped\n")
-    widget._update_status()
+    assert widget.refresh_button is not None
+    widget.refresh_button.click()
     assert "worker stopped" in widget._log_content.value
 
 

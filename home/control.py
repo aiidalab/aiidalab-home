@@ -298,12 +298,12 @@ class DaemonControlWidget(ControlSectionWidget):
         )
         self.remove_worker_button.on_click(self._on_remove_worker)
 
+        # Loaded when opened, and on every status update while open.
         self._log_content = ipw.HTML()
-        reload_log_button = ipw.Button(description="Reload log", icon="refresh")
-        reload_log_button.on_click(self._reload_log)
+        log_name = Path(self._daemon.daemon_log_file).name
         self._log_accordion = ipw.Accordion(
-            children=[ipw.VBox([self._log_content, reload_log_button])],
-            titles=[f"Daemon log ({Path(self._daemon.daemon_log_file).name})"],
+            children=[self._log_content],
+            titles=[f"Daemon log: last {self._LOG_TAIL_LINES} lines ({log_name})"],
             selected_index=None,
         )
         self._log_accordion.observe(self._reload_log_if_open, names="selected_index")
@@ -506,7 +506,7 @@ class DaemonControlWidget(ControlSectionWidget):
         if self._log_accordion.selected_index is not None:
             self._reload_log()
 
-    def _reload_log(self, _=None):
+    def _reload_log(self):
         try:
             tail = _read_log_tail(self._daemon.daemon_log_file, self._LOG_TAIL_LINES)
         except Exception as exc:
