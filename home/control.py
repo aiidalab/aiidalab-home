@@ -208,11 +208,22 @@ def _worker_age(stats):
     return None
 
 
+def _workers_oldest_first(workers):
+    """(pid, stats) pairs, oldest first; workers without an age go last."""
+
+    def age(item):
+        age = _worker_age(item[1])
+        return -1 if age is None else age
+
+    return sorted(workers.items(), key=age, reverse=True)
+
+
 def _oldest_worker(workers):
     """PID of the oldest worker, the one circus stops first, or None."""
-    ages = {pid: _worker_age(stats) for pid, stats in workers.items()}
-    ages = {pid: age for pid, age in ages.items() if age is not None}
-    return max(ages, key=ages.__getitem__, default=None)
+    ordered = _workers_oldest_first(workers)
+    if ordered and _worker_age(ordered[0][1]) is not None:
+        return ordered[0][0]
+    return None
 
 
 def _worker_table_html(workers, stopping=None) -> str:
@@ -230,13 +241,7 @@ def _worker_table_html(workers, stopping=None) -> str:
             for header in headers
         )
     ]
-
-    def oldest_first(item):
-        age = _worker_age(item[1])
-        return (age is None, -(age or 0))  # workers without an age go last
-
-    by_age = sorted(workers.items(), key=oldest_first)
-    for pid, stats in by_age:
+    for pid, stats in _workers_oldest_first(workers):
         if not isinstance(stats, dict):
             # circus reports a message instead of stats for a worker that
             # has just stopped.
