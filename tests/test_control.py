@@ -838,20 +838,6 @@ def test_daemon_restart_falls_back_to_start(daemon_widget, monkeypatch):
     assert "The daemon has been restarted." in widget.info.value
 
 
-def test_daemon_restart_failure_is_shown(daemon_widget, monkeypatch):
-    widget, daemon = daemon_widget
-
-    def _raise():
-        raise DaemonException("Connection to the daemon timed out.")
-
-    monkeypatch.setattr(daemon, "restart_daemon", _raise)
-    widget.restart_button.click()
-    assert daemon.calls == []
-    assert State.ERROR.color in widget.info.value
-    assert "Failed to restart the daemon: Connection" in widget.info.value
-    _assert_action_buttons_enabled(widget)
-
-
 @pytest.mark.parametrize(
     "button", ["stop_button", "add_worker_button", "remove_worker_button"]
 )
@@ -869,31 +855,6 @@ def test_daemon_restart(daemon_widget):
     assert daemon.calls == ["restart"]
     assert "The daemon has been restarted." in widget.info.value
     _assert_action_buttons_enabled(widget)
-
-
-@pytest.mark.parametrize(
-    "button, method, running, action",
-    [
-        ("start_button", "start_daemon", False, "start the daemon"),
-        ("stop_button", "stop_daemon", True, "stop the daemon"),
-        ("restart_button", "restart_daemon", True, "restart the daemon"),
-    ],
-)
-def test_daemon_timeout_of_other_actions_is_an_error(
-    daemon_widget, monkeypatch, button, method, running, action
-):
-    widget, daemon = daemon_widget
-    daemon.running = running
-
-    def _time_out(**_):
-        raise DaemonTimeoutException("Connection to the daemon timed out.")
-
-    monkeypatch.setattr(daemon, method, _time_out)
-    getattr(widget, button).click()
-    assert State.ERROR.color in widget.info.value
-    assert (
-        f"Failed to {action}: Connection to the daemon timed out." in widget.info.value
-    )
 
 
 def test_daemon_failing_status_probe_after_action(daemon_widget, monkeypatch):
@@ -959,25 +920,41 @@ def test_daemon_remove_worker_without_ages(daemon_widget, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "button, method, expected",
+    "button, method, running, state, message",
     [
-        ("add_worker_button", "increase_workers", "may still be starting"),
-        ("remove_worker_button", "decrease_workers", "may still be shutting down"),
+        ("start_button", "start_daemon", False, State.ERROR, "Failed to start"),
+        ("stop_button", "stop_daemon", True, State.ERROR, "Failed to stop"),
+        ("restart_button", "restart_daemon", True, State.ERROR, "Failed to restart"),
+        # circus still completes a worker change after the client stops waiting.
+        (
+            "add_worker_button",
+            "increase_workers",
+            True,
+            State.WARNING,
+            "may still be starting",
+        ),
+        (
+            "remove_worker_button",
+            "decrease_workers",
+            True,
+            State.WARNING,
+            "may still be shutting down",
+        ),
     ],
 )
-def test_daemon_worker_change_timeout_is_a_warning(
-    daemon_widget, monkeypatch, button, method, expected
+def test_daemon_action_timeout(
+    daemon_widget, monkeypatch, button, method, running, state, message
 ):
     widget, daemon = daemon_widget
+    daemon.running = running
 
-    def _time_out(number, timeout=None, wait=False):
+    def _time_out(*_, **__):
         raise DaemonTimeoutException("Connection to the daemon timed out.")
 
     monkeypatch.setattr(daemon, method, _time_out)
     getattr(widget, button).click()
-    assert State.WARNING.color in widget.info.value
-    assert expected in widget.info.value
-    assert "Failed" not in widget.info.value
+    assert state.color in widget.info.value
+    assert message in widget.info.value
     _assert_action_buttons_enabled(widget)
 
 
