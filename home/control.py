@@ -373,7 +373,10 @@ class DaemonControlWidget(ControlSectionWidget):
             self._add_worker,
             "Adding a worker...",
             "A worker has been added.",
-            pending_message="The new worker is still starting; refresh in a moment.",
+            pending_message=(
+                f"No answer from the daemon within {_WORKER_CHANGE_TIMEOUT} s; "
+                "the new worker may still be starting. Refresh in a moment."
+            ),
         )
 
     def _on_remove_worker(self, _=None):
@@ -386,8 +389,8 @@ class DaemonControlWidget(ControlSectionWidget):
             "Removing a worker...",
             "A worker has been removed.",
             pending_message=(
-                "The worker is still shutting down, which can take a while if it "
-                "is running processes; refresh in a moment."
+                f"No answer from the daemon within {_WORKER_CHANGE_TIMEOUT} s; "
+                "the worker may still be shutting down. Refresh in a moment."
             ),
         )
 

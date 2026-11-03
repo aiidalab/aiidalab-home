@@ -918,8 +918,8 @@ def test_daemon_remove_worker_shows_the_stopping_worker(daemon_widget, monkeypat
 @pytest.mark.parametrize(
     "button, method, expected",
     [
-        ("add_worker_button", "increase_workers", "still starting"),
-        ("remove_worker_button", "decrease_workers", "still shutting down"),
+        ("add_worker_button", "increase_workers", "may still be starting"),
+        ("remove_worker_button", "decrease_workers", "may still be shutting down"),
     ],
 )
 def test_daemon_worker_change_timeout_is_a_warning(
