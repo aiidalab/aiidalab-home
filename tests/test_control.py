@@ -580,26 +580,28 @@ def test_read_log_tail_empty_and_missing(tmp_path):
 
 def test_worker_table_html():
     workers = {
-        "1234": {
-            "wid": 1,
-            "cpu": 12.34,
-            "mem": 0.5,
-            "mem_info1": "150M",
-            "age": 3700,
-        },
-        "5678": {"wid": 2, "cpu": "N/A", "mem": "N/A", "mem_info1": "N/A"},
+        "1111": {"wid": 7, "cpu": "N/A", "mem": "N/A", "mem_info1": "N/A", "age": 0},
         # circus reports a message for a worker that has just stopped.
-        "9999": "No such process (stopped?)",
+        "2222": "No such process (stopped?)",
+        "3333": {"wid": 8, "cpu": 12.34, "mem": 0.5, "mem_info1": "150M", "age": 3700},
     }
     table = _worker_table_html(workers)
     rows = re.findall(r"<tr>.*?</tr>", table)
     assert len(rows) == 4  # header + 3 workers
-    assert "1234" in rows[1]
+    assert "Worker" not in rows[0]
+    # Oldest first, the worker without stats last.
+    assert "3333" in rows[1]
+    assert "1111" in rows[2]
+    assert "2222" in rows[3]
+    # Formatted stats, and "?" for those circus could not read.
     assert "12.3%" in rows[1]
     assert "150M" in rows[1]
     assert "1h 01m" in rows[1]
     assert "?" in rows[2]
-    assert "9999" in rows[3]
+    assert "0s" in rows[2]
+    # circus' worker ids are not shown.
+    assert ">7<" not in table
+    assert ">8<" not in table
 
 
 def test_worker_table_html_marks_stopping_worker():
@@ -620,22 +622,6 @@ def test_oldest_worker():
     }
     assert _oldest_worker(workers) == "5678"
     assert _oldest_worker({"9999": "No such process (stopped?)"}) is None
-
-
-def test_worker_table_html_oldest_first_without_circus_ids():
-    workers = {
-        "1111": {"wid": 7, "age": 0},
-        "2222": "No such process (stopped?)",
-        "3333": {"wid": 8, "age": 120},
-    }
-    table = _worker_table_html(workers)
-    rows = re.findall(r"<tr>.*?</tr>", table)
-    assert "Worker" not in rows[0]
-    assert "3333" in rows[1]
-    assert "1111" in rows[2]
-    assert "2222" in rows[3]
-    assert ">7<" not in table
-    assert ">8<" not in table
 
 
 @pytest.mark.parametrize("workers", [None, {}])
