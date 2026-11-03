@@ -963,6 +963,14 @@ def test_daemon_refused_command_is_shown(daemon_widget, monkeypatch):
     _assert_action_buttons_enabled(widget)
 
 
+def test_daemon_action_refused_during_refresh(daemon_widget):
+    widget, daemon = daemon_widget
+    widget._refreshing = True  # A refresh is still running.
+    widget.stop_button.click()
+    assert daemon.calls == []
+    assert "wait for the status update" in widget.info.value
+
+
 def test_daemon_refresh_skipped_while_busy(daemon_widget, monkeypatch):
     widget, _ = daemon_widget
     calls = []

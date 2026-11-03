@@ -435,7 +435,8 @@ class DaemonControlWidget(ControlSectionWidget):
         pending_message=None,
     ):
         """Run `action` in a thread; on timeout, warn with `pending_message`."""
-        if self._busy:
+        if self._busy or self._refreshing:
+            self.show_warning("Please wait for the status update to finish.")
             return
         self._busy = True
         for button in self._action_buttons:
