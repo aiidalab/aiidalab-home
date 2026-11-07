@@ -1,12 +1,73 @@
 [build-system]
-# this version is required to support reading of version in setup.cfg
-requires = ["setuptools>=46.4.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aiidalab_home"
+version = "26.11.0"
+description = "Package for the AiiDAlab Home app."
+readme = "README.md"
+authors = [{ name = "The AiiDAlab Team", email = "aiidalab@materialscloud.org" }]
+license = "MIT"
+license-files = ["LICENSE.txt"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: AiiDA",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+]
+requires-python = ">=3.12"
+dependencies = [
+    "Jinja2>=2.11.3,<4",
+    "Markdown>=3.4",
+    "aiida-core>=2,<3",
+    "aiidalab>=v26.10.0",
+    "humanfriendly~=10.0",
+    "ipython~=7.0",
+    "ipywidgets~=8.0",
+    "traitlets~=5.0",
+    "nbclassic~=1.3",
+    "pexpect~=4.9",
+    "requests~=2.32",
+]
+
+[project.urls]
+Homepage = "https://github.com/aiidalab/aiidalab-home"
+"Bug Tracker" = "https://github.com/aiidalab/aiidalab-home/issues"
+
+[dependency-groups]
+dev = [
+    "bumpver>=2022.1118",
+    "pre-commit>=3.6.0",
+    "pgtest~=1.3",
+    "pytest~=8.3.0",
+    "pytest-docker~=3.1.0",
+    "pytest-selenium~=4.1.0",
+    "selenium~=4.23.0",
+    "types-pexpect~=4.9",
+    "types-Markdown>=3.4",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["home"]
+
+[tool.bumpver]
+current_version = "v26.11.0"
+version_pattern = "v0Y.0M.PATCH[PYTAGNUM]"
+commit_message = "Bump version {old_version} -> {new_version}."
+commit = true
+tag = true
+push = true
+
+[tool.bumpver.file_patterns]
+"pyproject.toml" = [
+    'version = "{pep440_version}"',
+    'current_version = "{version}"',
+]
 
 [tool.ruff]
 line-length = 88
 show-fixes = true
-target-version = "py312"
 
 [tool.ruff.lint]
 ignore = ["BLE001"]
