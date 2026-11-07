@@ -68,7 +68,6 @@ push = true
 [tool.ruff]
 line-length = 88
 show-fixes = true
-target-version = "py312"
 
 [tool.ruff.lint]
 ignore = ["BLE001"]
