@@ -43,8 +43,8 @@ jobs:
                   activate-environment: 'true'
 
             - name: Install package test dependencies
-              # Notebook tests happen in the container, here we only need to install
-              # the dev dependency group (plus requests, which comes with the package).
+              # Notebook tests happen in the container
+              # so only install the dev dependency group.
               run: uv pip install --group dev
 
             - name: Set jupyter token env
