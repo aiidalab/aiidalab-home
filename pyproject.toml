@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aiidalab_home"
-dynamic = ["version"]
+version = "26.11.0"
 description = "Package for the AiiDAlab Home app."
 readme = "README.md"
 authors = [{ name = "The AiiDAlab Team", email = "aiidalab@materialscloud.org" }]
@@ -48,9 +48,6 @@ dev = [
     "types-Markdown>=3.4",
 ]
 
-[tool.hatch.version]
-path = "home/__init__.py"
-
 [tool.hatch.build.targets.wheel]
 packages = ["home"]
 
@@ -63,8 +60,10 @@ tag = true
 push = true
 
 [tool.bumpver.file_patterns]
-"home/__init__.py" = ['__version__ = "{version}"']
-"pyproject.toml" = ['current_version = "{version}"']
+"pyproject.toml" = [
+    'version = "{pep440_version}"',
+    'current_version = "{version}"',
+]
 
 [tool.ruff]
 line-length = 88
