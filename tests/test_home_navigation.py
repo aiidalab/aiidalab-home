@@ -30,6 +30,8 @@ def test_classic_navigation_preserves_server_base_url(
     spec = importlib.util.spec_from_file_location(
         "home_shortcuts", Path(__file__).parents[1] / "start.py"
     )
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     widget = module.get_start_widget("../home", "../../..")
