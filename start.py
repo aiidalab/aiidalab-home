@@ -1,10 +1,14 @@
 import ipywidgets as ipw
+from nbclassic import nbclassic_path
 
 
 def get_start_widget(appbase, jupbase):
     # http://fontawesome.io/icons/
 
     width = "70px"
+    # Notebook 7's presence moves the classic browser to /nbclassic, even when
+    # its server extension is disabled. Keep jupbase for JupyterHub deployments.
+    classicbase = jupbase + nbclassic_path()
 
     template = """
     <center>
@@ -12,7 +16,7 @@ def get_start_widget(appbase, jupbase):
     <tr>
 
     <td style="text-align:center">
-    <a style="{style}" href="{jupbase}/tree/" title="File Manager" target="_blank">
+    <a style="{style}" href="{classicbase}/tree/" title="File Manager" target="_blank">
     <i class="fa fa-file-text-o fa-3x"></i>
     </a><br>
     File Manager
@@ -30,7 +34,7 @@ def get_start_widget(appbase, jupbase):
     <td style="width:{width}"></td>
 
     <td style="text-align:center">
-    <a style="{style}" href="{jupbase}/tree/#running" title="Task Manager" target="_blank">
+    <a style="{style}" href="{classicbase}/tree/#running" title="Task Manager" target="_blank">
     <i class="fa fa-tasks fa-3x"></i>
     </a><br>
     Tasks
@@ -71,6 +75,6 @@ def get_start_widget(appbase, jupbase):
 """
 
     html = template.format(
-        appbase=appbase, jupbase=jupbase, style="margin:20px", width=width
+        appbase=appbase, classicbase=classicbase, style="margin:20px", width=width
     )
     return ipw.HTML(html)
