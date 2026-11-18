@@ -20,7 +20,7 @@ A. V. Yakutovich et al., Comp. Mat. Sci. 188, 110165 (2021).
 
 ## For maintainers
 
-To create a new release, clone the repository, install development dependencies with `pip install '.[dev]'`, and then execute `bumpver update`.
+To create a new release, clone the repository, install development dependencies with `pip install --group dev`, and then execute `bumpver update`.
 This will:
 
   1. Create a tagged release with bumped version and push it to the repository.
