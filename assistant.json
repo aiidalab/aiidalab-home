@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "title": "AiiDAlab Home",
+  "notebook": "start.ipynb",
+  "capabilities": ["find installed applications", "find calculations", "inspect AiiDA process reports", "explain failed or paused calculations"],
+  "assistant": {"version": 1}
+}

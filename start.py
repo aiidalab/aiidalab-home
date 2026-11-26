@@ -84,4 +84,9 @@ def get_start_widget(appbase, jupbase):
 """
 
     html = template.format(appbase=appbase, classicbase=classicbase)
-    return ipw.HTML(html)
+    links = ipw.HTML(html)
+    try:
+        from aiidalab_ai_assistant import AssistantPanel
+    except ImportError:
+        return links
+    return ipw.VBox([AssistantPanel(apps_url="../"), links])
