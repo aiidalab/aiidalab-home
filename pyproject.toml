@@ -55,7 +55,7 @@ path = "home/__init__.py"
 packages = ["home"]
 
 [tool.bumpver]
-current_version = "v26.11.2"
+current_version = "v26.11.3"
 version_pattern = "v0Y.0M.PATCH[PYTAGNUM]"
 commit_message = "Bump version {old_version} -> {new_version}."
 commit = true
