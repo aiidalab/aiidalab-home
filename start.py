@@ -1,3 +1,5 @@
+from importlib import import_module
+
 import ipywidgets as ipw
 from nbclassic import nbclassic_path
 
@@ -84,4 +86,12 @@ def get_start_widget(appbase, jupbase):
 """
 
     html = template.format(appbase=appbase, classicbase=classicbase)
-    return ipw.HTML(html)
+    links = ipw.HTML(html)
+    try:
+        assistant = import_module("aiidalab_ai_assistant")
+    except ImportError:
+        return links
+    make_panel = getattr(assistant, "AssistantPanel", None)
+    if make_panel is None:
+        return links
+    return ipw.VBox([make_panel(apps_url="../"), links])
