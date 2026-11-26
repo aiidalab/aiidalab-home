@@ -134,8 +134,10 @@
   display: flex;
   flex-wrap: wrap;
   width: 100%;
+  box-sizing: border-box;
+  padding: 0 20px;
   gap: 50px;
-  justify-content: space-between;
+  justify-content: space-around;
 }
 
 #nav-buttons .nav-item {
